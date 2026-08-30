@@ -74,3 +74,39 @@ sqlite3 ~/.lucy/memory.db "SELECT speaker, text FROM turns ORDER BY id DESC LIMI
 - **Calls cost money.** A publicly posted number attracts spam, and every
   answered call bills.
 - **Login expires.** Re-run `guava login` in a real terminal when it lapses.
+
+## Letting her control the computer
+
+Off by default. The phone number is public, so nothing here is reachable until
+you configure it deliberately.
+
+Three gates stand between a caller and the machine:
+
+1. **Caller ID** must be in `LUCY_OWNER_NUMBERS`.
+2. **A spoken PIN** (`LUCY_CONTROL_PIN`) must be said during the call.
+3. **Arbitrary shell** stays refused unless `LUCY_ALLOW_SHELL=1`.
+
+Caller ID is spoofable, so the PIN is the credential that actually matters.
+Keep it out of the repo.
+
+Add to the `EnvironmentVariables` dict in `ai.lucy.agent.plist`:
+
+    LUCY_OWNER_NUMBERS   +1YOURNUMBER
+    LUCY_CONTROL_PIN     something-only-you-know
+    LUCY_ALLOW_SHELL     1          (only if you want arbitrary commands)
+
+Then `launchctl kickstart -k gui/$(id -u)/ai.lucy.agent`.
+
+On a call: say the PIN, then ask for what you want.
+
+    "Open Spotify"          launches an app
+    "Lock the screen"       system actions: lock, sleep, volume, mute, now playing
+    "Run git status"        arbitrary command, if shell is enabled
+
+Destructive commands are refused even for the owner: recursive deletes, disk
+formatting, sudo, shutdown, piping the internet into a shell, reaching other
+machines over ssh, and pushing to a remote. Every attempt, allowed or refused,
+is logged to `~/.lucy/control.log`.
+
+    uv run python control.py            # show current gate configuration
+    uv run python test_control_gates.py # 20 assertions on the gates

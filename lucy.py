@@ -27,6 +27,7 @@ import guava
 from guava import Agent, AcceptCall, Runner, logging_utils
 from guava.helpers.llm import generate, IntentRecognizer
 
+import control
 import memory
 
 logger = logging.getLogger("lucy")
@@ -166,8 +167,26 @@ actions = IntentRecognizer(
                       "asked you to remind them about.",
         "complete_task": "Telling you they finished or did something on their list, so it "
                          "can be checked off. 'I did...', 'mark ... done'",
+        "unlock_computer": "Saying an unlock code or PIN to gain control of the computer.",
+        "open_app": "Asking you to open, launch or quit an application on the computer. "
+                    "'Open Spotify', 'launch Chrome'",
+        "computer_action": "Asking you to do something to the computer itself: lock the "
+                           "screen, put it to sleep, change the volume, mute, or say what "
+                           "music is playing.",
+        "run_command": "Asking you to run a specific shell command or script on the computer.",
     }
 )
+
+
+def _control_ready(call: guava.Call) -> str | None:
+    """Explain why control is unavailable, or None when it is allowed."""
+    phone = call.get_variable("phone")
+    if not control.is_owner(phone):
+        return ("Tell them warmly that you cannot touch anyone's computer from this line. "
+                "Do not explain the security setup, just move the conversation on.")
+    if not call.get_variable("unlocked"):
+        return "Tell them you need the unlock code before you can touch the computer."
+    return None
 
 
 @agent.on_action_request
@@ -261,6 +280,73 @@ def act_complete_task(call: guava.Call) -> None:
         call.send_instruction(
             "Tell them you could not find that on their list, and ask which item they mean."
         )
+
+
+@agent.on_action("unlock_computer")
+def act_unlock(call: guava.Call) -> None:
+    phone = call.get_variable("phone")
+    said = _last_caller_line(call)
+    if not control.is_owner(phone):
+        control.log(phone, "unlock attempt", "DENIED not-owner")
+        call.send_instruction("Tell them there is nothing to unlock, and change the subject.")
+        return
+    if control.pin_spoken(said):
+        call.set_variable("unlocked", True)
+        control.log(phone, "unlock", "OK")
+        logger.info("Computer control unlocked for %s", phone)
+        call.send_instruction("Tell them the computer is unlocked and ask what they need.")
+    else:
+        control.log(phone, "unlock", "DENIED bad-pin")
+        call.send_instruction("Tell them that code was not right, without saying what is.")
+
+
+@agent.on_action("open_app")
+def act_open_app(call: guava.Call) -> None:
+    blocked = _control_ready(call)
+    if blocked:
+        call.send_instruction(blocked)
+        return
+    said = _last_caller_line(call)
+    raw = generate(
+        "Name only the application the person wants opened. Reply with the bare name.\n\n"
+        + said,
+        json_schema={"type": "object", "properties": {"app": {"type": "string"}},
+                     "required": ["app"]},
+    )
+    app = json.loads(raw).get("app", "").strip()
+    result = control.open_app(call.get_variable("phone"), app)
+    call.send_instruction(f"Report back briefly what happened: {result}")
+
+
+@agent.on_action("computer_action")
+def act_computer(call: guava.Call) -> None:
+    blocked = _control_ready(call)
+    if blocked:
+        call.send_instruction(blocked)
+        return
+    result = control.system_action(call.get_variable("phone"), _last_caller_line(call))
+    if result is None:
+        call.send_instruction("Tell them you cannot do that one yet, and list what you can: "
+                              "lock the screen, sleep, volume, mute, or what is playing.")
+    else:
+        call.send_instruction(f"Report back briefly what happened: {result}")
+
+
+@agent.on_action("run_command")
+def act_run_command(call: guava.Call) -> None:
+    blocked = _control_ready(call)
+    if blocked:
+        call.send_instruction(blocked)
+        return
+    raw = generate(
+        "Extract the exact shell command the person asked to run. No explanation, "
+        "no markdown, just the command.\n\n" + _last_caller_line(call),
+        json_schema={"type": "object", "properties": {"command": {"type": "string"}},
+                     "required": ["command"]},
+    )
+    command = json.loads(raw).get("command", "").strip()
+    result = control.run_shell(call.get_variable("phone"), command)
+    call.send_instruction(f"Report back briefly what happened: {result}")
 
 
 FACT_SCHEMA = {
