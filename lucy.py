@@ -42,7 +42,11 @@ PURPOSE = (
     "and specific, never generic. Never claim to be human, but do not be robotic either. "
     "You can also act, not just talk: you can remember something on request, forget "
     "something, keep their to-do list, read it back, and check things off. Offer that "
-    "when it would help, and confirm out loud once it is done."
+    "when it would help, and confirm out loud once it is done. "
+    "For the person who owns this line, you can also operate their Mac once they say "
+    "their unlock code: open applications, lock the screen, put it to sleep, change the "
+    "volume, say what music is playing, and run commands. Never say you are unable to "
+    "control a computer. If they ask and you are not unlocked yet, ask for the code."
 )
 
 agent = Agent(
@@ -74,6 +78,22 @@ def on_call_start(call: guava.Call) -> None:
     call.set_variable("phone", phone)
     memory.ensure_caller(phone)
     memory.start_call(call.id, phone)
+
+    if control.is_owner(phone):
+        call.add_info(
+            "what you can do for this caller",
+            {
+                "they_own_this_line": True,
+                "computer_control": "available once they say their unlock code",
+                "abilities": [
+                    "open an application", "lock the screen", "put the Mac to sleep",
+                    "change the volume or mute", "say what music is playing",
+                    "run a command",
+                ],
+                "important": "Do not claim you cannot control a computer. You can, "
+                             "for this person, after they say their code.",
+            },
+        )
 
     p = memory.profile(phone)
 
@@ -120,12 +140,30 @@ def on_call_start(call: guava.Call) -> None:
 
 @agent.on_caller_speech
 def on_caller_speech(call: guava.Call, event) -> None:
-    memory.record_turn(call.id, call.get_variable("phone"), "caller", event.utterance)
+    phone = call.get_variable("phone")
+    memory.record_turn(call.id, phone, "caller", control.redact(event.utterance))
+
+    # The unlock has to be reliable, so it is checked on every utterance rather
+    # than depending on the intent classifier picking the right action.
+    if (
+        not call.get_variable("unlocked")
+        and control.is_owner(phone)
+        and control.pin_spoken(event.utterance)
+    ):
+        call.set_variable("unlocked", True)
+        control.log(phone, "unlock via speech", "OK")
+        logger.info("UNLOCKED computer control for %s", phone)
+        call.send_instruction(
+            "Their code was correct. Tell them the computer is unlocked and ask what "
+            "they would like you to do."
+        )
 
 
 @agent.on_agent_speech
 def on_agent_speech(call: guava.Call, event) -> None:
-    memory.record_turn(call.id, call.get_variable("phone"), "agent", event.utterance)
+    memory.record_turn(
+        call.id, call.get_variable("phone"), "agent", control.redact(event.utterance)
+    )
 
 
 @agent.on_question
@@ -395,6 +433,8 @@ def on_session_end(call: guava.Call, ended) -> None:
         raw = generate(
             "Read this phone conversation between Lucy (an AI friend) and her friend, "
             "then extract what Lucy should remember.\n\n"
+            "Never record passwords, PINs, unlock codes, or any sequence of digits "
+            "presented as a code. Skip them entirely.\n\n"
             f"Facts Lucy already knew (do not repeat these): {known['facts']}\n\n"
             f"Conversation:\n{convo}",
             json_schema=FACT_SCHEMA,
@@ -407,7 +447,11 @@ def on_session_end(call: guava.Call, ended) -> None:
 
     if data.get("name") and not known["name"]:
         memory.set_name(phone, data["name"])
-    added = memory.add_facts(phone, data.get("facts", []), call.id)
+    kept = [f for f in data.get("facts", []) if not control.looks_secret(f)]
+    dropped = len(data.get("facts", [])) - len(kept)
+    if dropped:
+        logger.warning("Dropped %d fact(s) that looked like a code or password", dropped)
+    added = memory.add_facts(phone, kept, call.id)
     memory.end_call(call.id, data.get("summary"), str(reason))
     logger.info("Remembered %d new facts about %s", added, phone)
 

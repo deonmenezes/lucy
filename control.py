@@ -114,6 +114,34 @@ def pin_spoken(text: str) -> bool:
     return re.sub(r"[^0-9a-z]", "", PIN.lower()) in said
 
 
+SECRET_WORDS = re.compile(r"\b(pin|pen|code|passcode|password|unlock)\b", re.I)
+
+
+def redact(text: str) -> str:
+    """Strip the PIN out of anything before it is stored or published.
+
+    Speech-to-text mangles a spoken PIN in unpredictable ways ("my pen is
+    829-272"), so this removes any digit run that matches the PIN's digits
+    with separators, not just an exact match.
+    """
+    if not PIN or not text:
+        return text
+    digits = re.sub(r"\D", "", PIN)
+    if not digits:
+        return text
+    loose = r"[\s\-\.]*".join(digits)
+    return re.sub(loose, "[redacted]", text)
+
+
+def looks_secret(text: str) -> bool:
+    """True if this sentence is about a code and carries digits."""
+    if not text:
+        return False
+    if PIN and re.sub(r"\D", "", PIN) in re.sub(r"\D", "", text):
+        return True
+    return bool(SECRET_WORDS.search(text) and re.search(r"\d{3}", text))
+
+
 def forbidden_reason(command: str) -> str | None:
     for pattern, reason in FORBIDDEN:
         if re.search(pattern, command, re.IGNORECASE):
