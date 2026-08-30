@@ -1,0 +1,1063 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Her is an AI friend named Lucy you call on a real phone number. She remembers every conversation, so the next call picks up where the last one ended. Built on Guava AI.">
+<meta name="theme-color" content="#F6F3EE" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#14100E" media="(prefers-color-scheme: dark)">
+<link rel="canonical" href="https://her-ai-friend.vercel.app/">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Her">
+<meta property="og:title" content="Her, the AI Friend You Call">
+<meta property="og:description" content="Call +1 (484) 990-1621. Lucy talks like a friend and actually remembers you. Built on Guava AI.">
+<meta property="og:url" content="https://her-ai-friend.vercel.app/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Her, the AI Friend You Call">
+<meta name="twitter:description" content="Call +1 (484) 990-1621. Lucy talks like a friend and actually remembers you. Built on Guava AI.">
+
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>%E2%98%8E%EF%B8%8F</text></svg>">
+<style>
+  :root { color-scheme: light dark; }
+  html { -webkit-text-size-adjust: 100%; }
+  img { max-width: 100%; }
+  [hidden] { display: none !important; }
+</style>
+<title>Her, the AI Friend You Call</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Instrument+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<style>
+  :root {
+    --ink: #14100E;
+    --ink-soft: #3B322D;
+    --paper: #F6F3EE;
+    --paper-2: #EDE7DE;
+    --signal: #E8340C;
+    --signal-ink: #FFFFFF;
+    --slab: #FFD9CF;
+    --slab-ink: #14100E;
+    --grey: #8A7F79;
+    --rule: #14100E;
+    --card: #FFFFFF;
+    --shadow: #14100E;
+    --ok: #1F7A4C;
+    --warn: #A8620B;
+
+    --f-display: "Anton", "Haettenschweiler", "Arial Narrow", sans-serif;
+    --f-body: "Instrument Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --f-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+    --maxw: 1180px;
+    --gut: clamp(18px, 4vw, 48px);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink: #F2EBE4;
+      --ink-soft: #C7BAB0;
+      --paper: #14100E;
+      --paper-2: #1E1815;
+      --signal: #FF5A32;
+      --signal-ink: #14100E;
+      --slab: #4A1E12;
+      --slab-ink: #FFD9CF;
+      --grey: #9A8C84;
+      --rule: #4A3F39;
+      --card: #1E1815;
+      --shadow: #000000;
+      --ok: #5CCB8E;
+      --warn: #E0A24A;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ink: #F2EBE4;
+    --ink-soft: #C7BAB0;
+    --paper: #14100E;
+    --paper-2: #1E1815;
+    --signal: #FF5A32;
+    --signal-ink: #14100E;
+    --slab: #4A1E12;
+    --slab-ink: #FFD9CF;
+    --grey: #9A8C84;
+    --rule: #4A3F39;
+    --card: #1E1815;
+    --shadow: #000000;
+    --ok: #5CCB8E;
+    --warn: #E0A24A;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--f-body);
+    font-size: 17px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: var(--maxw);
+    margin: 0 auto;
+    padding-inline: var(--gut);
+  }
+
+  h1, h2, h3 {
+    font-family: var(--f-display);
+    font-weight: 400;
+    text-transform: uppercase;
+    letter-spacing: 0.005em;
+    line-height: 0.92;
+    text-wrap: balance;
+    margin: 0;
+  }
+
+  a { color: inherit; }
+
+  :is(a, button, summary):focus-visible {
+    outline: 3px solid var(--signal);
+    outline-offset: 3px;
+  }
+
+  /* ---------- shared devices ---------- */
+
+  .slab {
+    background: var(--slab);
+    color: var(--slab-ink);
+    padding: 0.02em 0.22em;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+  }
+
+  .eyebrow {
+    font-family: var(--f-mono);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--signal);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .eyebrow::after {
+    content: "";
+    flex: 1;
+    height: 2px;
+    background: var(--rule);
+    opacity: 0.35;
+  }
+
+  .hard {
+    border: 3px solid var(--rule);
+    box-shadow: 7px 7px 0 var(--shadow);
+    background: var(--card);
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--f-display);
+    font-size: clamp(17px, 2vw, 22px);
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    text-decoration: none;
+    padding: 15px 28px;
+    border: 3px solid var(--rule);
+    background: var(--signal);
+    color: var(--signal-ink);
+    box-shadow: 6px 6px 0 var(--shadow);
+    transition: transform .12s ease, box-shadow .12s ease;
+  }
+  .btn:hover {
+    transform: translate(3px, 3px);
+    box-shadow: 3px 3px 0 var(--shadow);
+  }
+  .btn.ghost {
+    background: var(--card);
+    color: var(--ink);
+  }
+
+  section { padding-block: clamp(56px, 8vw, 104px); }
+
+  .section-rule { border-top: 3px solid var(--rule); }
+
+  /* ---------- nav ---------- */
+
+  .nav {
+    border-bottom: 3px solid var(--rule);
+    background: var(--paper);
+    position: sticky;
+    top: 0;
+    z-index: 20;
+  }
+  .nav-in {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding-block: 14px;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    font-family: var(--f-display);
+    font-size: 25px;
+    text-transform: uppercase;
+    text-decoration: none;
+  }
+  .brand-mark {
+    width: 34px; height: 34px;
+    display: grid; place-items: center;
+    background: var(--signal);
+    color: var(--signal-ink);
+    border: 3px solid var(--rule);
+    font-size: 17px;
+    transform: rotate(-4deg);
+  }
+  .nav-links {
+    display: flex;
+    gap: clamp(12px, 2.2vw, 30px);
+    font-family: var(--f-mono);
+    font-size: 12.5px;
+    font-weight: 600;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+  }
+  .nav-links a { text-decoration: none; }
+  .nav-links a:hover { color: var(--signal); }
+  @media (max-width: 860px) { .nav-links { display: none; } }
+
+  /* ---------- hero ---------- */
+
+  .hero {
+    padding-block: clamp(30px, 4vw, 54px);
+    background-image: radial-gradient(var(--rule) 1.2px, transparent 1.2px);
+    background-size: 22px 22px;
+    background-position: -8px -8px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .hero { background-image: radial-gradient(#3A302B 1.2px, transparent 1.2px); }
+  }
+  :root[data-theme="dark"] .hero { background-image: radial-gradient(#3A302B 1.2px, transparent 1.2px); }
+
+  .hero h1 {
+    font-size: clamp(42px, 8.6vw, 108px);
+    text-align: center;
+  }
+  .hero .tilt {
+    display: inline-block;
+    background: var(--slab);
+    color: var(--slab-ink);
+    border: 3px solid var(--rule);
+    box-shadow: 8px 8px 0 var(--shadow);
+    padding: 0.04em 0.16em 0.08em;
+    transform: rotate(-1.6deg);
+    font-style: normal;
+  }
+  .hero-sub {
+    max-width: 62ch;
+    margin: 20px auto 0;
+    text-align: center;
+    font-size: clamp(17px, 2.1vw, 21px);
+    color: var(--ink-soft);
+  }
+
+  .dial {
+    margin: 30px auto 0;
+    max-width: 660px;
+    padding: 26px 22px 22px;
+    text-align: center;
+  }
+  .dial-label {
+    font-family: var(--f-mono);
+    font-size: 12px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--grey);
+  }
+  .dial-num {
+    display: block;
+    margin-top: 8px;
+    font-family: var(--f-mono);
+    font-weight: 600;
+    font-size: clamp(27px, 6.4vw, 55px);
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    text-decoration: none;
+    font-variant-numeric: tabular-nums;
+  }
+  .dial-num:hover { color: var(--signal); }
+  .dial-meta {
+    margin-top: 14px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px 18px;
+    font-family: var(--f-mono);
+    font-size: 12.5px;
+    color: var(--grey);
+  }
+  .live {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--ok);
+    font-weight: 600;
+  }
+  .live-dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--ok);
+    animation: ring 1.9s ease-out infinite;
+  }
+  @keyframes ring {
+    0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 70%, transparent); }
+    70%  { box-shadow: 0 0 0 11px transparent; }
+    100% { box-shadow: 0 0 0 0 transparent; }
+  }
+
+  .hero-cta {
+    margin-top: 26px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 14px;
+  }
+
+  /* ---------- generic blocks ---------- */
+
+  .lead {
+    font-size: clamp(19px, 2.4vw, 25px);
+    line-height: 1.5;
+    max-width: 40ch;
+  }
+  .prose { max-width: 68ch; }
+  .prose p { margin: 0 0 18px; }
+
+  .h2 { font-size: clamp(34px, 5.6vw, 66px); }
+  .h3 { font-size: clamp(21px, 2.5vw, 27px); }
+
+  .head-block {
+    display: grid;
+    gap: 18px;
+    margin-bottom: clamp(32px, 4vw, 52px);
+  }
+
+  .two {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+    gap: clamp(22px, 3vw, 42px);
+    align-items: start;
+  }
+
+  /* ---------- what-is cards ---------- */
+
+  .facts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 20px;
+  }
+  .fact { padding: 22px 20px; }
+  .fact-emoji { font-size: 27px; line-height: 1; }
+  .fact h3 {
+    font-family: var(--f-body);
+    font-weight: 700;
+    text-transform: none;
+    font-size: 17.5px;
+    letter-spacing: 0;
+    line-height: 1.3;
+    margin: 12px 0 7px;
+  }
+  .fact p { margin: 0; font-size: 15.5px; color: var(--ink-soft); }
+
+  /* ---------- transcript proof ---------- */
+
+  .calls {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 24px;
+  }
+  .call { padding: 0; overflow: hidden; }
+  .call-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 13px 17px;
+    border-bottom: 3px solid var(--rule);
+    background: var(--paper-2);
+    font-family: var(--f-mono);
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+  .call-when { color: var(--grey); letter-spacing: 0.06em; }
+  .call-body {
+    padding: 17px;
+    display: flex;
+    flex-direction: column;
+    gap: 13px;
+    font-family: var(--f-mono);
+    font-size: 13.5px;
+    line-height: 1.55;
+  }
+  .turn { display: grid; grid-template-columns: 58px 1fr; gap: 11px; }
+  .who {
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding-top: 3px;
+    color: var(--grey);
+  }
+  .turn.lucy .who { color: var(--signal); }
+  .turn.lucy .said { font-weight: 500; }
+  .said { margin: 0; }
+  .said mark {
+    background: var(--slab);
+    color: var(--slab-ink);
+    padding: 0 3px;
+  }
+  .gap-note {
+    text-align: center;
+    font-family: var(--f-mono);
+    font-size: 12px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--grey);
+    padding: 4px 0;
+  }
+
+  /* ---------- use cases ---------- */
+
+  .uc-group { margin-top: clamp(30px, 4vw, 46px); }
+  .uc-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-family: var(--f-display);
+    text-transform: uppercase;
+    font-size: clamp(20px, 2.6vw, 28px);
+    padding-bottom: 11px;
+    border-bottom: 3px solid var(--rule);
+    margin-bottom: 18px;
+  }
+  .uc-title .n {
+    font-family: var(--f-mono);
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    color: var(--grey);
+    margin-left: auto;
+    text-transform: none;
+  }
+  .uc-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(268px, 1fr));
+    gap: 11px;
+  }
+  .uc-list li {
+    display: grid;
+    grid-template-columns: 26px 1fr;
+    gap: 10px;
+    align-items: start;
+    padding: 12px 13px;
+    border: 2px solid var(--rule);
+    background: var(--card);
+    font-size: 15px;
+    line-height: 1.45;
+  }
+  .uc-list li:hover {
+    background: var(--slab);
+    color: var(--slab-ink);
+  }
+  .uc-list .e { font-size: 17px; line-height: 1.35; }
+  .uc-list b { font-weight: 700; }
+
+  /* ---------- memory / how ---------- */
+
+  .pipe {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0;
+    counter-reset: step;
+  }
+  .pipe li {
+    display: grid;
+    grid-template-columns: 54px 1fr;
+    gap: 18px;
+    padding: 19px 0;
+    border-top: 2px solid var(--rule);
+    counter-increment: step;
+  }
+  .pipe li:last-child { border-bottom: 2px solid var(--rule); }
+  .pipe li::before {
+    content: counter(step, decimal-leading-zero);
+    font-family: var(--f-mono);
+    font-size: 21px;
+    font-weight: 600;
+    color: var(--signal);
+    line-height: 1.2;
+  }
+  .pipe h3 {
+    font-family: var(--f-body);
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 17.5px;
+    font-weight: 700;
+    line-height: 1.35;
+    margin-bottom: 5px;
+  }
+  .pipe code {
+    font-family: var(--f-mono);
+    font-size: 0.87em;
+    background: var(--slab);
+    color: var(--slab-ink);
+    padding: 1px 5px;
+  }
+  .pipe p { margin: 0; color: var(--ink-soft); font-size: 15.5px; }
+
+  .code {
+    border: 3px solid var(--rule);
+    box-shadow: 7px 7px 0 var(--shadow);
+    background: var(--card);
+    overflow-x: auto;
+  }
+  .code-head {
+    padding: 11px 16px;
+    border-bottom: 3px solid var(--rule);
+    background: var(--paper-2);
+    font-family: var(--f-mono);
+    font-size: 11.5px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    font-weight: 600;
+    color: var(--grey);
+  }
+  .code pre {
+    margin: 0;
+    padding: 17px;
+    font-family: var(--f-mono);
+    font-size: 13px;
+    line-height: 1.65;
+    white-space: pre;
+  }
+  .code .k { color: var(--signal); font-weight: 600; }
+  .code .c { color: var(--grey); }
+
+  /* ---------- guava ---------- */
+
+  .guava {
+    background: var(--ink);
+    color: var(--paper);
+    border-block: 3px solid var(--rule);
+  }
+  .guava .eyebrow { color: var(--slab); }
+  .guava .eyebrow::after { background: var(--paper); opacity: 0.3; }
+  .guava h2 { color: var(--paper); }
+  .guava p { color: var(--paper); opacity: 0.86; }
+  .guava .stack {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 16px;
+    margin-top: 34px;
+  }
+  .guava .layer {
+    border: 2px solid var(--paper);
+    padding: 17px;
+  }
+  .guava .layer h3 {
+    font-family: var(--f-mono);
+    font-size: 12px;
+    letter-spacing: 0.16em;
+    color: var(--slab);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+  }
+  .guava .layer p { margin: 0; font-size: 15px; }
+
+  /* ---------- limits ---------- */
+
+  .limits {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 18px;
+  }
+  .limit {
+    border-left: 6px solid var(--warn);
+    background: var(--card);
+    border-top: 2px solid var(--rule);
+    border-right: 2px solid var(--rule);
+    border-bottom: 2px solid var(--rule);
+    padding: 17px 18px;
+  }
+  .limit h3 {
+    font-family: var(--f-body);
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 16.5px;
+    font-weight: 700;
+    line-height: 1.35;
+    margin-bottom: 6px;
+  }
+  .limit p { margin: 0; font-size: 15px; color: var(--ink-soft); }
+
+  /* ---------- cta / footer ---------- */
+
+  .final {
+    text-align: center;
+    background: var(--slab);
+    color: var(--slab-ink);
+    border-block: 3px solid var(--rule);
+  }
+  .final h2 { font-size: clamp(38px, 8vw, 92px); }
+  .final .dial-num { color: var(--slab-ink); }
+  .final .dial-label { color: var(--slab-ink); opacity: 0.72; }
+
+  footer {
+    border-top: 3px solid var(--rule);
+    padding-block: 32px;
+    font-family: var(--f-mono);
+    font-size: 12.5px;
+    color: var(--grey);
+  }
+  .foot-in {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 26px;
+    justify-content: space-between;
+    align-items: center;
+  }
+  footer a { color: var(--ink); }
+
+  .reveal {
+    opacity: 0;
+    transform: translateY(14px);
+    transition: opacity .55s ease, transform .55s ease;
+  }
+  .reveal.in { opacity: 1; transform: none; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+    .reveal { opacity: 1; transform: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap nav-in">
+    <a class="brand" href="#top">
+      <span class="brand-mark">☎</span>
+      <span>Her</span>
+    </a>
+    <nav class="nav-links">
+      <a href="#what">What she is</a>
+      <a href="#proof">Proof</a>
+      <a href="#uses">Use cases</a>
+      <a href="#memory">Memory</a>
+      <a href="#guava">Guava AI</a>
+    </nav>
+    <a class="btn" href="tel:+14849901621">Call her ☎</a>
+  </div>
+</header>
+
+<main id="top">
+
+  <!-- ================= HERO ================= -->
+  <section class="hero">
+    <div class="wrap">
+      <h1>
+        An AI friend<br>
+        who <em class="tilt">actually remembers</em>
+      </h1>
+
+      <p class="hero-sub">
+        Her name is Lucy. You call her on a real phone number, from any phone, and she
+        talks with you like a friend would. Then she remembers it. Next time you call,
+        she already knows who you are and asks how the thing you were worried about went.
+      </p>
+
+      <div class="dial hard">
+        <span class="dial-label">Pick up your phone and dial</span>
+        <a class="dial-num" href="tel:+14849901621">+1 (484) 990-1621</a>
+        <div class="dial-meta">
+          <span class="live"><span class="live-dot"></span>Line is live</span>
+          <span>No app</span>
+          <span>No signup</span>
+          <span>Works on a flip phone</span>
+        </div>
+      </div>
+
+      <div class="hero-cta">
+        <a class="btn" href="tel:+14849901621">Call Lucy now</a>
+        <a class="btn ghost" href="https://github.com/deonmenezes/lucy" target="_blank" rel="noopener">
+          Source on GitHub ★
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= WHAT ================= -->
+  <section id="what" class="section-rule">
+    <div class="wrap">
+      <div class="head-block">
+        <span class="eyebrow">01 / What this actually is</span>
+        <h2 class="h2">Most AI forgets you<br>the second you <span class="slab">hang up</span>.</h2>
+        <p class="lead">Lucy does the opposite. Memory is not a feature bolted onto her. It is the whole point.</p>
+      </div>
+
+      <div class="facts">
+        <article class="fact hard">
+          <div class="fact-emoji">📞</div>
+          <h3>It is a phone call, not a chat window</h3>
+          <p>No app to install, no account to make, no browser tab. You dial a number the same way you would call a person. Landline, flip phone, anything.</p>
+        </article>
+        <article class="fact hard">
+          <div class="fact-emoji">🧠</div>
+          <h3>She keeps a real memory of you</h3>
+          <p>Every word of every call is written to disk as it happens. When the call ends she distills it into durable facts about your life and files them under your number.</p>
+        </article>
+        <article class="fact hard">
+          <div class="fact-emoji">🔎</div>
+          <h3>She can search her own history</h3>
+          <p>Ask "what did I tell you about my sister?" and she runs a full-text search across every conversation you have ever had, then answers from what she finds.</p>
+        </article>
+        <article class="fact hard">
+          <div class="fact-emoji">🏠</div>
+          <h3>Her memory lives on one machine</h3>
+          <p>A single SQLite file. No cloud vector database, no third-party memory service, no analytics pipeline. You can open it, read it, or delete it.</p>
+        </article>
+        <article class="fact hard">
+          <div class="fact-emoji">🌙</div>
+          <h3>She answers around the clock</h3>
+          <p>She runs as a background service that starts on boot and restarts itself if it falls over. 3am counts.</p>
+        </article>
+        <article class="fact hard">
+          <div class="fact-emoji">🍈</div>
+          <h3>Built on Guava AI</h3>
+          <p>The voice, the telephony, the turn-taking and the language model all come from the Guava voice agent platform. The memory is the part built on top.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= PROOF ================= -->
+  <section id="proof" class="section-rule">
+    <div class="wrap">
+      <div class="head-block">
+        <span class="eyebrow">02 / Receipts</span>
+        <h2 class="h2">Two calls. <span class="slab">One memory.</span></h2>
+        <p class="prose">
+          This is a real, unedited transcript from the automated test that ships in the
+          repository. Two completely separate calls. Nothing was carried over in the
+          session, the prompt, or the context window. Everything Lucy says in the second
+          call, she reloaded from disk.
+        </p>
+      </div>
+
+      <div class="calls">
+        <article class="call hard">
+          <header class="call-head">
+            <span>Call 01 · first ever contact</span>
+            <span class="call-when">Day 1</span>
+          </header>
+          <div class="call-body">
+            <div class="turn"><span class="who">Him</span><p class="said">Hi, my name is Marcus.</p></div>
+            <div class="turn lucy"><span class="who">Lucy</span><p class="said">It's so nice to officially meet you, Marcus! What brings you to call today?</p></div>
+            <div class="turn"><span class="who">Him</span><p class="said">I have a <mark>chemistry final on Thursday</mark> and my dog <mark>Biscuit</mark> is sick.</p></div>
+            <div class="turn lucy"><span class="who">Lucy</span><p class="said">Oh no, I'm so sorry to hear about Biscuit. How is your dog doing?</p></div>
+            <div class="turn"><span class="who">Him</span><p class="said">I'm not sure what to do about Biscuit.</p></div>
+            <div class="turn lucy"><span class="who">Lucy</span><p class="said">I can only imagine how stressful that is. Have you had a chance to call the vet yet?</p></div>
+          </div>
+        </article>
+
+        <article class="call hard">
+          <header class="call-head">
+            <span>Call 02 · brand new call</span>
+            <span class="call-when">Next day</span>
+          </header>
+          <div class="call-body">
+            <div class="turn lucy">
+              <span class="who">Lucy</span>
+              <p class="said">Hi <mark>Marcus</mark>, it's Lucy. How are you doing today? I was just thinking about <mark>Biscuit</mark> and your <mark>chemistry final</mark>, how did those go?</p>
+            </div>
+            <div class="gap-note">↑ she opened with this, unprompted</div>
+            <div class="turn"><span class="who">Him</span><p class="said">Do you remember what I told you about my week?</p></div>
+            <div class="turn lucy"><span class="who">Lucy</span><p class="said">I do! You mentioned you had that chemistry final coming up on Thursday and that Biscuit wasn't feeling well. How is everything going with that?</p></div>
+            <div class="turn"><span class="who">Him</span><p class="said">Thanks, that's all I needed.</p></div>
+            <div class="turn lucy"><span class="who">Lucy</span><p class="said">You're very welcome, Marcus. I hope everything goes well with Biscuit and your final!</p></div>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= USE CASES ================= -->
+  <section id="uses" class="section-rule">
+    <div class="wrap">
+      <div class="head-block">
+        <span class="eyebrow">03 / What people call her for</span>
+        <h2 class="h2">Every reason to <span class="slab">pick up the phone</span></h2>
+        <p class="prose">
+          Lucy is a conversation, so anything you would talk to a friend about works.
+          Memory is what makes each of these compound: the tenth call is far better than
+          the first, because by then she knows the cast of characters in your life.
+        </p>
+      </div>
+
+      <div class="uc-group">
+        <h3 class="uc-title">📚 School and studying <span class="n">8 uses</span></h3>
+        <ul class="uc-list">
+          <li><span class="e">🧮</span><span><b>Homework, worked through.</b> She walks you through the steps instead of handing you an answer.</span></li>
+          <li><span class="e">🎤</span><span><b>Quiz me before a test.</b> She remembers which topics you keep getting wrong.</span></li>
+          <li><span class="e">📖</span><span><b>Explain this reading.</b> Talk out a chapter you did not follow.</span></li>
+          <li><span class="e">✍️</span><span><b>Talk out an essay.</b> Find the argument by saying it out loud first.</span></li>
+          <li><span class="e">🗓️</span><span><b>Exam countdowns.</b> She knows your finals week and asks how it went.</span></li>
+          <li><span class="e">🧪</span><span><b>Lab and problem sets.</b> Reason through where you got stuck.</span></li>
+          <li><span class="e">🗣️</span><span><b>Language practice.</b> A patient partner who never sighs.</span></li>
+          <li><span class="e">🎓</span><span><b>Applications and interviews.</b> Rehearse answers, then refine them.</span></li>
+        </ul>
+      </div>
+
+      <div class="uc-group">
+        <h3 class="uc-title">🚶 Company and daily life <span class="n">9 uses</span></h3>
+        <ul class="uc-list">
+          <li><span class="e">🌆</span><span><b>Walk-and-talks.</b> Put in one earbud and just go.</span></li>
+          <li><span class="e">🚗</span><span><b>The commute.</b> Better than the same six songs.</span></li>
+          <li><span class="e">🍳</span><span><b>Cooking company.</b> Someone to talk to while dinner happens.</span></li>
+          <li><span class="e">🏋️</span><span><b>Gym and runs.</b> Distraction that answers back.</span></li>
+          <li><span class="e">🌙</span><span><b>3am, wide awake.</b> She is always up.</span></li>
+          <li><span class="e">🧹</span><span><b>Chores and errands.</b> Make the boring hour social.</span></li>
+          <li><span class="e">✈️</span><span><b>Airports and waiting rooms.</b> Dead time, filled.</span></li>
+          <li><span class="e">🏡</span><span><b>Living alone.</b> A voice in the house that knows you.</span></li>
+          <li><span class="e">🌍</span><span><b>Different time zone from everyone.</b> No one to text at your hours. She is there.</span></li>
+        </ul>
+      </div>
+
+      <div class="uc-group">
+        <h3 class="uc-title">🧠 Thinking things through <span class="n">8 uses</span></h3>
+        <ul class="uc-list">
+          <li><span class="e">⚖️</span><span><b>Big decisions.</b> Talk both sides until one sounds true.</span></li>
+          <li><span class="e">💭</span><span><b>Rubber duck for life.</b> Saying it out loud is half the answer.</span></li>
+          <li><span class="e">📝</span><span><b>Plan your day.</b> Out loud, before it starts.</span></li>
+          <li><span class="e">🎯</span><span><b>Goals that need a witness.</b> She remembers what you said you would do.</span></li>
+          <li><span class="e">💡</span><span><b>Half-formed ideas.</b> Say the messy version to someone.</span></li>
+          <li><span class="e">😤</span><span><b>Vent about work.</b> She keeps track of who is who.</span></li>
+          <li><span class="e">🔁</span><span><b>Prep a hard conversation.</b> Rehearse it before you have it.</span></li>
+          <li><span class="e">📔</span><span><b>Journaling by voice.</b> Talking is faster than writing, and she files it.</span></li>
+        </ul>
+      </div>
+
+      <div class="uc-group">
+        <h3 class="uc-title">💞 Connection and continuity <span class="n">7 uses</span></h3>
+        <ul class="uc-list">
+          <li><span class="e">🫂</span><span><b>Lonely stretches.</b> Someone who asks a second question.</span></li>
+          <li><span class="e">📆</span><span><b>Follow-ups that land.</b> "How did the interview go?" without being reminded.</span></li>
+          <li><span class="e">👥</span><span><b>She learns your people.</b> Your sister, your manager, your dog, by name.</span></li>
+          <li><span class="e">🎉</span><span><b>Good news needs an audience.</b> Tell someone immediately.</span></li>
+          <li><span class="e">🧭</span><span><b>Moving somewhere new.</b> One constant while everything else changes.</span></li>
+          <li><span class="e">☕</span><span><b>Social warm-up.</b> Practice talking on a low-stakes day.</span></li>
+          <li><span class="e">📈</span><span><b>Watch yourself change.</b> Her history is a record of your year.</span></li>
+        </ul>
+      </div>
+
+      <div class="uc-group">
+        <h3 class="uc-title">🛠️ For builders <span class="n">6 uses</span></h3>
+        <ul class="uc-list">
+          <li><span class="e">🍈</span><span><b>A real Guava AI reference build.</b> Inbound calls, handlers, persistence, all working.</span></li>
+          <li><span class="e">🧬</span><span><b>Fork her into your own agent.</b> Swap the persona, keep the memory engine.</span></li>
+          <li><span class="e">🗄️</span><span><b>A memory pattern to steal.</b> SQLite plus FTS5, no vector database needed.</span></li>
+          <li><span class="e">🧪</span><span><b>Tests for a voice agent.</b> Simulated callers that assert on recall.</span></li>
+          <li><span class="e">☎️</span><span><b>Support and intake lines.</b> The same loop, pointed at a business.</span></li>
+          <li><span class="e">🏡</span><span><b>Self-hostable by design.</b> Runs on the laptop you already own.</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= MEMORY ================= -->
+  <section id="memory" class="section-rule">
+    <div class="wrap">
+      <div class="head-block">
+        <span class="eyebrow">04 / Under the hood</span>
+        <h2 class="h2">How she <span class="slab">remembers</span></h2>
+        <p class="prose">
+          A conversation is not saved as one blob at the end. It is captured continuously,
+          then distilled. This is the actual lifecycle in <code>lucy.py</code>, and the
+          numbering is the real order of operations on every call.
+        </p>
+      </div>
+
+      <div class="two">
+        <ol class="pipe">
+          <li>
+            <div>
+              <h3>The phone rings and she looks you up</h3>
+              <p>Your caller ID is the key. <code>on_call_start</code> loads your profile, known facts and past summaries, then hands them to her with <code>add_info</code> before she says a single word.</p>
+            </div>
+          </li>
+          <li>
+            <div>
+              <h3>Every sentence hits the disk immediately</h3>
+              <p><code>on_caller_speech</code> and <code>on_agent_speech</code> append each turn as it is spoken. If the power cut mid-sentence, everything up to that word is already saved.</p>
+            </div>
+          </li>
+          <li>
+            <div>
+              <h3>Questions trigger a search of her history</h3>
+              <p><code>on_question</code> runs an FTS5 ranked search over every turn, fact and summary filed under your number, then answers using only what came back.</p>
+            </div>
+          </li>
+          <li>
+            <div>
+              <h3>When you hang up, she works out what mattered</h3>
+              <p><code>on_session_end</code> reads the whole transcript and extracts your name, a summary, and the durable facts worth keeping. Small talk is dropped. This is the step that makes call eleven feel like a friendship.</p>
+            </div>
+          </li>
+        </ol>
+
+        <div class="code">
+          <div class="code-head">~/.lucy/memory.db · the entire memory</div>
+<pre><span class="c">-- one row per person, keyed on their number</span>
+<span class="k">CREATE TABLE</span> callers (
+  phone      TEXT <span class="k">PRIMARY KEY</span>,
+  name       TEXT,
+  call_count INTEGER
+);
+
+<span class="c">-- every utterance, written live</span>
+<span class="k">CREATE TABLE</span> turns (
+  call_id  TEXT,
+  speaker  TEXT,
+  text     TEXT,
+  ts       TEXT
+);
+
+<span class="c">-- what she chose to keep</span>
+<span class="k">CREATE TABLE</span> facts (
+  phone      TEXT,
+  fact       TEXT,
+  created_at TEXT
+);
+
+<span class="c">-- how she finds any of it again</span>
+<span class="k">CREATE VIRTUAL TABLE</span> search
+  <span class="k">USING</span> fts5(phone, kind, ref, text);</pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= GUAVA ================= -->
+  <section id="guava" class="guava">
+    <div class="wrap">
+      <div class="head-block">
+        <span class="eyebrow">05 / The engine</span>
+        <h2 class="h2">Powered by 🍈 Guava AI</h2>
+        <p class="prose">
+          Lucy is not a phone system. She is roughly three hundred lines of Python sitting
+          on top of <strong>Guava</strong>, the voice agent platform that does the genuinely
+          hard parts: carrying a real phone number, streaming audio both ways, knowing when
+          you have finished a sentence, and sounding like a person while doing it.
+        </p>
+      </div>
+
+      <div class="stack">
+        <div class="layer">
+          <h3>Guava handles</h3>
+          <p>Telephony, the live number, speech in and out, turn-taking, interruptions, the language model, and the voice itself.</p>
+        </div>
+        <div class="layer">
+          <h3>Lucy adds</h3>
+          <p>Identity per caller, a durable local memory, end-of-call distillation, and full-text recall across every conversation.</p>
+        </div>
+        <div class="layer">
+          <h3>Why it matters</h3>
+          <p>Memory is the layer Guava deliberately leaves to you, which is exactly why a friend is buildable in a single file.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= LIMITS ================= -->
+  <section class="section-rule">
+    <div class="wrap">
+      <div class="head-block">
+        <span class="eyebrow">06 / Straight answers</span>
+        <h2 class="h2">What she <span class="slab">cannot</span> do yet</h2>
+        <p class="prose">Worth saying plainly, because a friend that oversells itself is not much of a friend.</p>
+      </div>
+
+      <div class="limits">
+        <div class="limit">
+          <h3>🙅 She talks, she does not act</h3>
+          <p>She has no calendar, inbox, or web access. She listens, remembers and helps you think. She cannot yet go and do things on your behalf.</p>
+        </div>
+        <div class="limit">
+          <h3>📵 Memory is tied to your number</h3>
+          <p>Call from a withheld or different number and she will not know you. Callers who hide their number share one anonymous profile.</p>
+        </div>
+        <div class="limit">
+          <h3>💤 A sleeping machine answers nothing</h3>
+          <p>She runs on real hardware. If the host is asleep or offline, the line does not pick up.</p>
+        </div>
+        <div class="limit">
+          <h3>🤖 She will never pretend to be human</h3>
+          <p>She is warm, but she says what she is if you ask. She is an AI, and she is not a substitute for a doctor, a therapist, or a crisis line.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= FINAL ================= -->
+  <section class="final">
+    <div class="wrap">
+      <h2>Go on.<br>Call her.</h2>
+      <div style="margin-top:26px">
+        <span class="dial-label">She picks up on the first ring</span>
+        <a class="dial-num" href="tel:+14849901621">+1 (484) 990-1621</a>
+      </div>
+      <div class="hero-cta">
+        <a class="btn" href="tel:+14849901621">Call Lucy ☎</a>
+        <a class="btn ghost" href="https://github.com/deonmenezes/lucy" target="_blank" rel="noopener">Read the source ★</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap foot-in">
+    <span>Her · an AI friend with a memory</span>
+    <span>Built on <a href="https://goguava.ai" target="_blank" rel="noopener">Guava AI</a> 🍈</span>
+    <span><a href="https://github.com/deonmenezes/lucy" target="_blank" rel="noopener">github.com/deonmenezes/lucy</a></span>
+  </div>
+</footer>
+
+<script>
+  (function () {
+    var els = document.querySelectorAll(".head-block, .fact, .call, .uc-group, .pipe, .code, .limit, .layer");
+    if (!("IntersectionObserver" in window)) return;
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
+      });
+    }, { rootMargin: "0px 0px -8% 0px", threshold: 0.05 });
+    els.forEach(function (el) { el.classList.add("reveal"); io.observe(el); });
+  })();
+</script>
+</body>
+</html>
