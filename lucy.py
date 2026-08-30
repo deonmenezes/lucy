@@ -242,6 +242,9 @@ def _control_ready(call: guava.Call) -> str | None:
 @agent.on_action_request
 def on_action_request(call: guava.Call, request: str):
     """Classify what the caller wants done. Returns None for ordinary conversation."""
+    # Keep the request: by the time a handler runs, the caller's last words are
+    # often just "Yeah." agreeing to the offer, not the actual instruction.
+    call.set_variable("last_request", request)
     return actions.classify(request)
 
 
@@ -254,10 +257,25 @@ def _last_caller_line(call: guava.Call) -> str:
     return ""
 
 
+def _intent(call: guava.Call) -> str:
+    """What the caller actually wants, preferring Guava's reading of the request.
+
+    Falls back to their last line, and appends it when it adds detail.
+    """
+    request = (call.get_variable("last_request") or "").strip()
+    last = _last_caller_line(call).strip()
+    if not request:
+        return last
+    # "Yeah", "sure", "please do" carry no instruction; do not append them.
+    if last and len(last.split()) > 3 and last.lower().rstrip(".!?") not in request.lower():
+        return f"{request}\n\nTheir exact words: {last}"
+    return request
+
+
 @agent.on_action("remember")
 def act_remember(call: guava.Call) -> None:
     phone = call.get_variable("phone")
-    said = _last_caller_line(call)
+    said = _intent(call)
     raw = generate(
         "Rewrite what this person asked to be remembered as one short standalone fact "
         "in the third person, no preamble.\n\n" + said,
@@ -276,7 +294,7 @@ def act_remember(call: guava.Call) -> None:
 @agent.on_action("forget")
 def act_forget(call: guava.Call) -> None:
     phone = call.get_variable("phone")
-    gone = memory.forget(phone, _last_caller_line(call))
+    gone = memory.forget(phone, _intent(call))
     if gone:
         logger.info("Forgot %d facts", len(gone))
         call.send_instruction(
@@ -295,7 +313,7 @@ def act_add_task(call: guava.Call) -> None:
     phone = call.get_variable("phone")
     raw = generate(
         "Turn this into one short to-do item, imperative, no preamble.\n\n"
-        + _last_caller_line(call),
+        + _intent(call),
         json_schema={"type": "object", "properties": {"task": {"type": "string"}},
                      "required": ["task"]},
     )
@@ -322,7 +340,7 @@ def act_list_tasks(call: guava.Call) -> None:
 @agent.on_action("complete_task")
 def act_complete_task(call: guava.Call) -> None:
     phone = call.get_variable("phone")
-    done = memory.complete_task(phone, _last_caller_line(call))
+    done = memory.complete_task(phone, _intent(call))
     if done:
         logger.info("Completed task: %s", done)
         call.send_instruction(f"Congratulate them briefly for finishing: {done}")
@@ -356,7 +374,7 @@ def act_open_app(call: guava.Call) -> None:
     if blocked:
         call.send_instruction(blocked)
         return
-    said = _last_caller_line(call)
+    said = _intent(call)
     raw = generate(
         "Name only the application the person wants opened. Reply with the bare name.\n\n"
         + said,
@@ -374,7 +392,7 @@ def act_computer(call: guava.Call) -> None:
     if blocked:
         call.send_instruction(blocked)
         return
-    result = control.system_action(call.get_variable("phone"), _last_caller_line(call))
+    result = control.system_action(call.get_variable("phone"), _intent(call))
     if result is None:
         call.send_instruction("Tell them you cannot do that one yet, and list what you can: "
                               "lock the screen, sleep, volume, mute, or what is playing.")
@@ -390,7 +408,7 @@ def act_run_command(call: guava.Call) -> None:
         return
     raw = generate(
         "Extract the exact shell command the person asked to run. No explanation, "
-        "no markdown, just the command.\n\n" + _last_caller_line(call),
+        "no markdown, just the command.\n\n" + _intent(call),
         json_schema={"type": "object", "properties": {"command": {"type": "string"}},
                      "required": ["command"]},
     )
@@ -407,7 +425,7 @@ def act_ask_claude(call: guava.Call) -> None:
         call.send_instruction(blocked)
         return
 
-    task = _last_caller_line(call)
+    task = _intent(call)
     call.send_instruction(
         "Tell them you are on it and will have an answer shortly. Keep it to one short "
         "sentence, then wait."
@@ -517,6 +535,7 @@ if __name__ == "__main__":
             "set" if st["pin_set"] else "NOT SET",
             "on" if st["shell_enabled"] else "off",
         )
+        logger.info("Claude Code bridge: %s", control.selftest())
         logger.info("Lucy is listening on %s. Press Ctrl+C to drain and stop.", args.number)
         Runner().listen_phone(agent, args.number).run()
     elif args.chat:

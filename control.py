@@ -31,9 +31,10 @@ ALLOW_SHELL = os.environ.get("LUCY_ALLOW_SHELL", "") == "1"
 # Owners skip the PIN when this is on. Caller ID is spoofable, so this trades
 # the second factor away for convenience.
 TRUST_CALLER_ID = os.environ.get("LUCY_TRUST_CALLER_ID", "") == "1"
-CLAUDE_BIN = os.environ.get(
-    "LUCY_CLAUDE_BIN", "/Applications/cmux.app/Contents/Resources/bin/claude"
-)
+# The real binary, not the cmux wrapper: that wrapper shells out to `claude`
+# on PATH and fails under launchd's minimal environment.
+CLAUDE_BIN = os.environ.get("LUCY_CLAUDE_BIN", str(Path.home() / ".local/bin/claude"))
+SUBPROC_PATH = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 CLAUDE_TIMEOUT = int(os.environ.get("LUCY_CLAUDE_TIMEOUT", "90"))
 
 # Refused even for the owner. These are the operations with no undo, or that
@@ -248,10 +249,11 @@ def ask_claude(caller: str, task: str) -> str:
         f"Task: {task}"
     )
     try:
+        env = dict(os.environ, PATH=SUBPROC_PATH, HOME=str(Path.home()))
         p = subprocess.run(
             [CLAUDE_BIN, "-p", prompt, "--dangerously-skip-permissions"],
             capture_output=True, text=True, timeout=CLAUDE_TIMEOUT,
-            cwd=str(Path.home()),
+            cwd=str(Path.home()), env=env,
         )
     except subprocess.TimeoutExpired:
         log(caller, f"claude: {task}", "TIMEOUT")
@@ -263,6 +265,21 @@ def ask_claude(caller: str, task: str) -> str:
     out = (p.stdout or "").strip() or (p.stderr or "").strip()
     log(caller, f"claude: {task}", "OK" if p.returncode == 0 else f"EXIT {p.returncode}")
     return out[:900] if out else "It finished but did not say anything back."
+
+
+def selftest() -> str:
+    """Confirm the Claude bridge really works from wherever the agent is running.
+
+    Claude Code keeps its credentials in the Keychain, so working in a terminal
+    does not prove it works under launchd. This runs the real path.
+    """
+    if not Path(CLAUDE_BIN).exists():
+        return f"FAIL: no binary at {CLAUDE_BIN}"
+    owner = next(iter(OWNERS), None)
+    if not owner:
+        return "SKIP: no owner configured"
+    out = ask_claude(owner, "Reply with exactly: ok").strip()
+    return "OK" if "ok" in out.lower()[:40] else f"FAIL: {out[:120]}"
 
 
 def status() -> dict:
