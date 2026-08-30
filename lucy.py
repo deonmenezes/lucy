@@ -46,7 +46,11 @@ PURPOSE = (
     "For the person who owns this line, you can also operate their Mac once they say "
     "their unlock code: open applications, lock the screen, put it to sleep, change the "
     "volume, say what music is playing, and run commands. Never say you are unable to "
-    "control a computer. If they ask and you are not unlocked yet, ask for the code."
+    "control a computer. If they ask and you are not unlocked yet, ask for the code. "
+    "For anything needing real work on the machine, finding something, changing a file, "
+    "running tests, checking on a project, hand it to Claude Code rather than guessing. "
+    "Say you are on it, let it work, then tell them what came back. It is fine to go "
+    "back to Claude several times in one call to refine or follow up."
 )
 
 agent = Agent(
@@ -78,6 +82,11 @@ def on_call_start(call: guava.Call) -> None:
     call.set_variable("phone", phone)
     memory.ensure_caller(phone)
     memory.start_call(call.id, phone)
+
+    if control.is_owner(phone) and control.TRUST_CALLER_ID:
+        call.set_variable("unlocked", True)
+        control.log(phone, "auto-unlock (trusted caller id)", "OK")
+        logger.info("Auto-unlocked control for owner %s", phone)
 
     if control.is_owner(phone):
         call.add_info(
@@ -212,6 +221,9 @@ actions = IntentRecognizer(
                            "screen, put it to sleep, change the volume, mute, or say what "
                            "music is playing.",
         "run_command": "Asking you to run a specific shell command or script on the computer.",
+        "ask_claude": "Asking for real work on the computer that takes more than one step: "
+                      "finding or reading files, changing code, running tests, checking on "
+                      "a project, fixing something, or any open-ended 'can you look into X'.",
     }
 )
 
@@ -385,6 +397,27 @@ def act_run_command(call: guava.Call) -> None:
     command = json.loads(raw).get("command", "").strip()
     result = control.run_shell(call.get_variable("phone"), command)
     call.send_instruction(f"Report back briefly what happened: {result}")
+
+
+@agent.on_action("ask_claude")
+def act_ask_claude(call: guava.Call) -> None:
+    """Hand the job to Claude Code and read back what it did."""
+    blocked = _control_ready(call)
+    if blocked:
+        call.send_instruction(blocked)
+        return
+
+    task = _last_caller_line(call)
+    call.send_instruction(
+        "Tell them you are on it and will have an answer shortly. Keep it to one short "
+        "sentence, then wait."
+    )
+    logger.info("Delegating to Claude Code: %s", task)
+    result = control.ask_claude(call.get_variable("phone"), task)
+    logger.info("Claude Code returned: %s", result[:160])
+    call.send_instruction(
+        "Report this back in your own voice, conversationally, no lists or jargon: " + result
+    )
 
 
 FACT_SCHEMA = {

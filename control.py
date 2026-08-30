@@ -28,6 +28,13 @@ TIMEOUT = 25
 OWNERS = {n.strip() for n in os.environ.get("LUCY_OWNER_NUMBERS", "").split(",") if n.strip()}
 PIN = os.environ.get("LUCY_CONTROL_PIN", "").strip()
 ALLOW_SHELL = os.environ.get("LUCY_ALLOW_SHELL", "") == "1"
+# Owners skip the PIN when this is on. Caller ID is spoofable, so this trades
+# the second factor away for convenience.
+TRUST_CALLER_ID = os.environ.get("LUCY_TRUST_CALLER_ID", "") == "1"
+CLAUDE_BIN = os.environ.get(
+    "LUCY_CLAUDE_BIN", "/Applications/cmux.app/Contents/Resources/bin/claude"
+)
+CLAUDE_TIMEOUT = int(os.environ.get("LUCY_CLAUDE_TIMEOUT", "90"))
 
 # Refused even for the owner. These are the operations with no undo, or that
 # would hand the machine to someone else entirely.
@@ -220,11 +227,51 @@ def run_shell(caller: str, command: str) -> str:
     return _run(argv, caller, command)
 
 
+def ask_claude(caller: str, task: str) -> str:
+    """Hand a job to Claude Code, which can actually work the machine.
+
+    Lucy is a conversation, not an agent loop. Anything needing several steps
+    (find a file, edit it, run the tests, report what broke) goes here instead
+    of being answered off the top of her head.
+    """
+    if not is_owner(caller):
+        log(caller, f"claude: {task}", "DENIED not-owner")
+        return "DENIED"
+    if not Path(CLAUDE_BIN).exists():
+        log(caller, f"claude: {task}", "ERROR no-binary")
+        return "Claude Code is not installed where I expected it."
+
+    prompt = (
+        "You are being driven over a phone call, so the person cannot see a screen. "
+        "Do the task, then reply with at most three short sentences describing what "
+        "you did and the result. No markdown, no code blocks, no lists.\n\n"
+        f"Task: {task}"
+    )
+    try:
+        p = subprocess.run(
+            [CLAUDE_BIN, "-p", prompt, "--dangerously-skip-permissions"],
+            capture_output=True, text=True, timeout=CLAUDE_TIMEOUT,
+            cwd=str(Path.home()),
+        )
+    except subprocess.TimeoutExpired:
+        log(caller, f"claude: {task}", "TIMEOUT")
+        return "That is taking a while. It is still worth asking me again in a moment."
+    except Exception as exc:
+        log(caller, f"claude: {task}", f"ERROR {exc}")
+        return f"That did not work: {exc}"
+
+    out = (p.stdout or "").strip() or (p.stderr or "").strip()
+    log(caller, f"claude: {task}", "OK" if p.returncode == 0 else f"EXIT {p.returncode}")
+    return out[:900] if out else "It finished but did not say anything back."
+
+
 def status() -> dict:
     return {
         "owners_configured": len(OWNERS),
         "pin_set": bool(PIN),
         "shell_enabled": ALLOW_SHELL,
+        "pin_required": not TRUST_CALLER_ID,
+        "claude_bridge": Path(CLAUDE_BIN).exists(),
         "log": str(LOG),
     }
 
