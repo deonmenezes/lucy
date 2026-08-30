@@ -433,6 +433,13 @@ if __name__ == "__main__":
         for hit in memory.search(phone, query):
             print(" -", hit)
     elif args.serve:
+        st = control.status()
+        logger.info(
+            "Computer control: %d owner number(s), PIN %s, shell %s",
+            st["owners_configured"],
+            "set" if st["pin_set"] else "NOT SET",
+            "on" if st["shell_enabled"] else "off",
+        )
         logger.info("Lucy is listening on %s. Press Ctrl+C to drain and stop.", args.number)
         Runner().listen_phone(agent, args.number).run()
     elif args.chat:
