@@ -1,4 +1,4 @@
-"""Generate the public journal page from Lucy's memory.
+"""Generate the journal dashboard from Lucy's memory.
 
 Only the caller keys listed in JOURNAL_KEYS are published. Everyone else who
 calls the number stays private, which matters because the number is public and
@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import html
 import os
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import memory
@@ -22,21 +22,50 @@ import memory
 OUT = Path(__file__).parent / "site" / "journal" / "index.html"
 KEYS = [k.strip() for k in os.environ.get("JOURNAL_KEYS", "local-test").split(",") if k.strip()]
 
+# Integrations Lucy does not have yet. Shown so the roadmap is legible, and
+# labelled honestly rather than implied to work.
+CONNECTORS = [
+    ("Phone line", "\U0001F4DE", "connected", "+1 (484) 990-1621, answering right now"),
+    ("Local memory", "\U0001F5C4", "connected", "SQLite on this machine, no cloud copy"),
+    ("Calendar", "\U0001F4C5", "off", "So she can see what your week looks like"),
+    ("Reminders", "⏰", "off", "Push her to-do list to your phone"),
+    ("Email", "✉️", "off", "Let her send the follow-up she promised"),
+    ("Messages", "\U0001F4AC", "off", "Text you the list after a call"),
+]
+
 
 def mask(key: str) -> str:
     digits = "".join(c for c in key if c.isdigit())
-    if len(digits) >= 4:
-        return f"the line ending {digits[-4:]}"
-    return key
+    return f"line ending {digits[-4:]}" if len(digits) >= 4 else key
 
 
-def when(iso: str | None, fmt: str = "%B %-d, %Y at %-I:%M %p") -> str:
+def local(iso: str | None) -> datetime | None:
     if not iso:
-        return ""
+        return None
     try:
-        return datetime.fromisoformat(iso).astimezone().strftime(fmt)
+        return datetime.fromisoformat(iso).astimezone()
     except Exception:
-        return iso
+        return None
+
+
+def when(iso: str | None, fmt: str = "%b %-d, %Y") -> str:
+    d = local(iso)
+    return d.strftime(fmt) if d else ""
+
+
+def ago(iso: str | None) -> str:
+    d = local(iso)
+    if not d:
+        return ""
+    delta = datetime.now(timezone.utc) - d.astimezone(timezone.utc)
+    mins = int(delta.total_seconds() // 60)
+    if mins < 1:
+        return "just now"
+    if mins < 60:
+        return f"{mins} min ago"
+    if mins < 1440:
+        return f"{mins // 60}h ago"
+    return f"{mins // 1440}d ago"
 
 
 def e(s) -> str:
@@ -46,76 +75,162 @@ def e(s) -> str:
 def build() -> str:
     c = memory.connect()
     q = ",".join("?" * len(KEYS))
+    today = datetime.now().astimezone().date()
 
     people = c.execute(f"SELECT * FROM callers WHERE phone IN ({q})", KEYS).fetchall()
-    name = next((p["name"] for p in people if p["name"]), None) or "You"
-    total_calls = sum(p["call_count"] or 0 for p in people)
+    name = next((p["name"] for p in people if p["name"]), None) or "you"
     first_seen = min((p["first_seen"] for p in people if p["first_seen"]), default=None)
-
-    facts = c.execute(
-        f"SELECT fact, created_at FROM facts WHERE phone IN ({q}) ORDER BY id DESC", KEYS
-    ).fetchall()
 
     calls = c.execute(
         f"SELECT * FROM calls WHERE phone IN ({q}) ORDER BY started_at DESC", KEYS
     ).fetchall()
+    facts = c.execute(
+        f"SELECT fact, created_at FROM facts WHERE phone IN ({q}) ORDER BY id DESC", KEYS
+    ).fetchall()
+    tasks = c.execute(
+        f"SELECT task, done, created_at, done_at FROM tasks WHERE phone IN ({q}) "
+        "ORDER BY done, id DESC", KEYS
+    ).fetchall()
+    turn_total = c.execute(f"SELECT COUNT(*) FROM turns WHERE phone IN ({q})", KEYS).fetchone()[0]
 
-    turn_total = c.execute(
-        f"SELECT COUNT(*) FROM turns WHERE phone IN ({q})", KEYS
-    ).fetchone()[0]
+    def is_today(iso):
+        d = local(iso)
+        return bool(d and d.date() == today)
 
-    entries = []
-    for call in calls:
+    calls_today = [r for r in calls if is_today(r["started_at"])]
+    facts_today = [r for r in facts if is_today(r["created_at"])]
+    tasks_added_today = [r for r in tasks if is_today(r["created_at"])]
+    tasks_done_today = [r for r in tasks if r["done"] and is_today(r["done_at"])]
+    open_tasks = [r for r in tasks if not r["done"]]
+
+    # ---------- what happened today ----------
+    if calls_today or facts_today or tasks_added_today:
+        bits = []
+        if calls_today:
+            bits.append(f"{len(calls_today)} call{'s' if len(calls_today) != 1 else ''}")
+        if facts_today:
+            bits.append(f"{len(facts_today)} new thing{'s' if len(facts_today) != 1 else ''} learned")
+        if tasks_added_today:
+            bits.append(f"{len(tasks_added_today)} added to your list")
+        if tasks_done_today:
+            bits.append(f"{len(tasks_done_today)} checked off")
+        today_line = ", ".join(bits) + "."
+        events = []
+        for r in calls_today:
+            events.append(
+                f'<li class="ev"><span class="ev-time">{e(when(r["started_at"], "%-I:%M %p"))}</span>'
+                f'<span class="ev-dot call"></span>'
+                f'<span class="ev-text">You called. {e(r["summary"] or "Conversation recorded.")}</span></li>'
+            )
+        for r in facts_today:
+            events.append(
+                f'<li class="ev"><span class="ev-time">{e(when(r["created_at"], "%-I:%M %p"))}</span>'
+                f'<span class="ev-dot fact"></span>'
+                f'<span class="ev-text">Lucy noted: {e(r["fact"])}</span></li>'
+            )
+        for r in tasks_done_today:
+            events.append(
+                f'<li class="ev"><span class="ev-time">{e(when(r["done_at"], "%-I:%M %p"))}</span>'
+                f'<span class="ev-dot done"></span>'
+                f'<span class="ev-text">Checked off: {e(r["task"])}</span></li>'
+            )
+        today_events = "\n".join(events) or '<li class="ev empty">Nothing logged yet today.</li>'
+    else:
+        today_line = "Nothing yet today. Call her and this fills in on its own."
+        today_events = '<li class="ev empty">No activity today.</li>'
+
+    # ---------- calls ----------
+    call_rows = []
+    for r in calls:
         turns = c.execute(
-            "SELECT speaker, text FROM turns WHERE call_id=? ORDER BY id", (call["call_id"],)
+            "SELECT COUNT(*) FROM turns WHERE call_id=?", (r["call_id"],)
+        ).fetchone()[0]
+        if not turns:
+            continue
+        call_rows.append(f"""
+        <li class="row">
+          <div class="row-main">
+            <span class="row-title">{e(when(r["started_at"], "%A, %B %-d"))}</span>
+            <span class="row-sub">{e(r["summary"] or "Conversation recorded.")}</span>
+          </div>
+          <div class="row-meta">
+            <span class="pill">{turns} exchanges</span>
+            <span class="row-when">{e(ago(r["started_at"]))}</span>
+          </div>
+        </li>""")
+    calls_html = "\n".join(call_rows) or '<li class="row empty">No calls yet.</li>'
+
+    # ---------- diary ----------
+    diary = []
+    for r in calls:
+        turns = c.execute(
+            "SELECT speaker, text FROM turns WHERE call_id=? ORDER BY id", (r["call_id"],)
         ).fetchall()
         if not turns:
             continue
-        rows = "\n".join(
-            f'<div class="turn {"lucy" if t["speaker"] == "agent" else ""}">'
-            f'<span class="who">{"Lucy" if t["speaker"] == "agent" else name}</span>'
-            f'<p class="said">{e(t["text"])}</p></div>'
+        lines = "\n".join(
+            f'<div class="t {"her" if t["speaker"] == "agent" else "you"}">'
+            f'<span class="t-who">{"Lucy" if t["speaker"] == "agent" else e(name)}</span>'
+            f'<p class="t-said">{e(t["text"])}</p></div>'
             for t in turns
         )
-        summary = (
-            f'<p class="entry-summary">{e(call["summary"])}</p>' if call["summary"] else ""
-        )
-        entries.append(f"""
-        <article class="entry">
-          <header class="entry-head">
-            <h2 class="entry-date">{e(when(call["started_at"], "%B %-d, %Y"))}</h2>
-            <span class="entry-time">{e(when(call["started_at"], "%-I:%M %p"))} · {len(turns)} exchanges</span>
+        diary.append(f"""
+        <article class="day">
+          <header class="day-head">
+            <h3 class="day-date">{e(when(r["started_at"], "%A, %B %-d"))}</h3>
+            <span class="day-time">{e(when(r["started_at"], "%-I:%M %p"))}</span>
           </header>
-          {summary}
-          <details class="entry-full">
-            <summary>Read the whole conversation</summary>
-            <div class="entry-turns">{rows}</div>
+          <p class="day-summary">{e(r["summary"] or "Conversation recorded.")}</p>
+          <details class="day-full">
+            <summary>Read the full conversation</summary>
+            <div class="t-list">{lines}</div>
           </details>
         </article>""")
+    diary_html = "\n".join(diary) or '<p class="empty-note">Your diary starts with your first call.</p>'
 
-    fact_items = "\n".join(f"<li>{e(f['fact'])}</li>" for f in facts) or \
-        "<li class='empty'>Nothing yet. Call her and she will start filling this in.</li>"
+    # ---------- knows / list / connectors ----------
+    knows_html = "\n".join(
+        f'<li class="chip"><span class="chip-text">{e(f["fact"])}</span>'
+        f'<span class="chip-when">{e(ago(f["created_at"]))}</span></li>'
+        for f in facts
+    ) or '<li class="chip empty"><span class="chip-text">Nothing yet.</span></li>'
 
-    entries_html = "\n".join(entries) or """
-        <article class="entry">
-          <p class="entry-summary">No conversations recorded yet. The journal writes
-          itself as soon as you hang up.</p>
-        </article>"""
+    list_html = "\n".join(
+        f'<li class="task {"is-done" if t["done"] else ""}">'
+        f'<span class="box">{"&#10003;" if t["done"] else ""}</span>'
+        f'<span class="task-text">{e(t["task"])}</span></li>'
+        for t in tasks
+    ) or '<li class="task empty"><span class="box"></span>'\
+         '<span class="task-text">Nothing on your list.</span></li>'
 
-    stamp = datetime.now().astimezone().strftime("%B %-d, %Y at %-I:%M %p %Z")
-    identities = ", ".join(mask(k) for k in KEYS)
-
-    return TEMPLATE.format(
-        name=e(name),
-        total_calls=total_calls,
-        turn_total=turn_total,
-        fact_count=len(facts),
-        since=e(when(first_seen, "%B %-d, %Y")) or "today",
-        identities=e(identities),
-        facts=fact_items,
-        entries=entries_html,
-        stamp=e(stamp),
+    conn_html = "\n".join(
+        f'<li class="conn"><span class="conn-icon">{icon}</span>'
+        f'<span class="conn-body"><b>{e(label)}</b><span>{e(note)}</span></span>'
+        f'<span class="status {state}">{"Connected" if state == "connected" else "Not connected"}</span></li>'
+        for label, icon, state, note in CONNECTORS
     )
+
+    out = TEMPLATE
+    for token, value in {
+        "%%NAME%%": e(name),
+        "%%CALLS%%": str(len(calls)),
+        "%%TURNS%%": str(turn_total),
+        "%%FACTS%%": str(len(facts)),
+        "%%OPEN%%": str(len(open_tasks)),
+        "%%SINCE%%": e(when(first_seen)) or "today",
+        "%%TODAY_DATE%%": e(datetime.now().astimezone().strftime("%A, %B %-d")),
+        "%%TODAY_LINE%%": e(today_line),
+        "%%TODAY_EVENTS%%": today_events,
+        "%%CALL_ROWS%%": calls_html,
+        "%%DIARY%%": diary_html,
+        "%%KNOWS%%": knows_html,
+        "%%LIST%%": list_html,
+        "%%CONNECTORS%%": conn_html,
+        "%%STAMP%%": e(datetime.now().astimezone().strftime("%b %-d, %Y at %-I:%M %p")),
+        "%%IDENTITIES%%": e(", ".join(mask(k) for k in KEYS)),
+    }.items():
+        out = out.replace(token, value)
+    return out
 
 
 TEMPLATE = """<!doctype html>
@@ -123,155 +238,258 @@ TEMPLATE = """<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>The Journal</title>
+<title>Your Journal</title>
 <meta name="description" content="Everything Lucy remembers, written down after every phone call.">
 <meta name="robots" content="noindex">
-<meta name="theme-color" content="#F6F3EE" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#14100E" media="(prefers-color-scheme: dark)">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#ffffff">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>%F0%9F%93%94</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Instrument+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-  :root {{
-    color-scheme: light dark;
-    --ink:#14100E; --ink-soft:#3B322D; --paper:#F6F3EE; --paper-2:#EDE7DE;
-    --signal:#E8340C; --signal-ink:#fff; --slab:#FFD9CF; --slab-ink:#14100E;
-    --grey:#8A7F79; --rule:#14100E; --card:#fff; --shadow:#14100E;
-    --f-display:"Anton","Arial Narrow",sans-serif;
-    --f-body:"Instrument Sans",ui-sans-serif,system-ui,sans-serif;
-    --f-mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
-  }}
-  @media (prefers-color-scheme: dark) {{
-    :root:not([data-theme="light"]) {{
-      --ink:#F2EBE4; --ink-soft:#C7BAB0; --paper:#14100E; --paper-2:#1E1815;
-      --signal:#FF5A32; --signal-ink:#14100E; --slab:#4A1E12; --slab-ink:#FFD9CF;
-      --grey:#9A8C84; --rule:#4A3F39; --card:#1E1815; --shadow:#000;
-    }}
-  }}
-  :root[data-theme="dark"] {{
-    --ink:#F2EBE4; --ink-soft:#C7BAB0; --paper:#14100E; --paper-2:#1E1815;
-    --signal:#FF5A32; --signal-ink:#14100E; --slab:#4A1E12; --slab-ink:#FFD9CF;
-    --grey:#9A8C84; --rule:#4A3F39; --card:#1E1815; --shadow:#000;
-  }}
-  * {{ box-sizing:border-box; }}
-  body {{ margin:0; background:var(--paper); color:var(--ink);
-    font-family:var(--f-body); font-size:17px; line-height:1.62; }}
-  .wrap {{ max-width:820px; margin:0 auto; padding-inline:clamp(18px,4vw,40px); }}
-  a {{ color:inherit; }}
-  :is(a,summary):focus-visible {{ outline:3px solid var(--signal); outline-offset:3px; }}
+  :root {
+    color-scheme: light;
+    --bg: #ffffff;
+    --panel: #ffffff;
+    --sunken: #f7f8f8;
+    --line: #e6e8e8;
+    --line-soft: #f0f1f1;
+    --text: #16181a;
+    --text-2: #5c6469;
+    --text-3: #8b9296;
+    --accent: #d8380f;
+    --accent-soft: #fdf0ec;
+    --green: #12805c;
+    --green-soft: #e8f5f0;
+    --radius: 10px;
+    --f: "Instrument Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --m: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: var(--f); font-size: 15px; line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; }
+  :is(a, summary, button):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
 
-  .top {{ border-bottom:3px solid var(--rule); background:var(--paper);
-    position:sticky; top:0; z-index:5; }}
-  .top-in {{ display:flex; align-items:center; justify-content:space-between;
-    gap:14px; padding-block:13px; }}
-  .brand {{ font-family:var(--f-display); font-size:22px; text-transform:uppercase;
-    text-decoration:none; display:flex; align-items:center; gap:10px; }}
-  .brand span.m {{ width:30px; height:30px; display:grid; place-items:center;
-    background:var(--signal); color:var(--signal-ink); border:3px solid var(--rule);
-    transform:rotate(-4deg); font-size:15px; }}
-  .back {{ font-family:var(--f-mono); font-size:12px; letter-spacing:.13em;
-    text-transform:uppercase; text-decoration:none; font-weight:600; }}
-  .back:hover {{ color:var(--signal); }}
+  /* top bar */
+  .bar {
+    position: sticky; top: 0; z-index: 10;
+    background: var(--bg); border-bottom: 1px solid var(--line);
+  }
+  .bar-in {
+    max-width: 1080px; margin: 0 auto; padding: 0 20px;
+    height: 56px; display: flex; align-items: center; gap: 16px;
+  }
+  .logo { display: flex; align-items: center; gap: 9px; font-weight: 600; text-decoration: none; }
+  .logo i { font-style: normal; width: 26px; height: 26px; border-radius: 7px;
+    background: var(--accent); color: #fff; display: grid; place-items: center; font-size: 13px; }
+  .bar-nav { margin-left: auto; display: flex; gap: 4px; }
+  .bar-nav a {
+    text-decoration: none; color: var(--text-2); font-size: 13.5px; font-weight: 500;
+    padding: 7px 11px; border-radius: 7px;
+  }
+  .bar-nav a:hover { background: var(--sunken); color: var(--text); }
+  @media (max-width: 700px) { .bar-nav a.opt { display: none; } }
 
-  header.hero {{ padding-block:clamp(34px,6vw,64px); border-bottom:3px solid var(--rule);
-    background-image:radial-gradient(var(--rule) 1.2px,transparent 1.2px);
-    background-size:22px 22px; }}
-  @media (prefers-color-scheme: dark) {{
-    :root:not([data-theme="light"]) header.hero {{
-      background-image:radial-gradient(#3A302B 1.2px,transparent 1.2px); }}
-  }}
-  :root[data-theme="dark"] header.hero {{
-    background-image:radial-gradient(#3A302B 1.2px,transparent 1.2px); }}
-  h1 {{ font-family:var(--f-display); text-transform:uppercase; font-weight:400;
-    line-height:.92; margin:0; font-size:clamp(40px,9vw,84px); }}
-  .kicker {{ font-family:var(--f-mono); font-size:12px; letter-spacing:.18em;
-    text-transform:uppercase; color:var(--signal); font-weight:600; margin-bottom:14px; }}
-  .sub {{ margin:16px 0 0; max-width:56ch; color:var(--ink-soft); }}
+  .page { max-width: 1080px; margin: 0 auto; padding: 26px 20px 64px; }
 
-  .stats {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr));
-    gap:12px; margin-top:26px; }}
-  .stat {{ border:3px solid var(--rule); background:var(--card); padding:13px 15px;
-    box-shadow:5px 5px 0 var(--shadow); }}
-  .stat b {{ display:block; font-family:var(--f-mono); font-size:27px; font-weight:600;
-    line-height:1.1; font-variant-numeric:tabular-nums; }}
-  .stat span {{ font-family:var(--f-mono); font-size:11px; letter-spacing:.13em;
-    text-transform:uppercase; color:var(--grey); }}
+  .head { margin-bottom: 22px; }
+  .head h1 { font-size: 26px; }
+  .head p { margin: 5px 0 0; color: var(--text-2); }
 
-  section {{ padding-block:clamp(34px,5vw,58px); }}
-  .sec-title {{ font-family:var(--f-display); text-transform:uppercase; font-weight:400;
-    font-size:clamp(24px,4vw,38px); margin:0 0 6px; }}
-  .sec-note {{ margin:0 0 22px; color:var(--grey); font-size:15px; }}
+  /* stat tiles */
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+  .tile { border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; background: var(--panel); }
+  .tile b { display: block; font-size: 26px; font-weight: 600; line-height: 1.15;
+    font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+  .tile span { font-size: 12.5px; color: var(--text-3); }
 
-  .knows {{ list-style:none; margin:0; padding:0; display:grid; gap:9px; }}
-  .knows li {{ border:2px solid var(--rule); background:var(--card); padding:12px 14px;
-    font-size:15.5px; display:grid; grid-template-columns:auto 1fr; gap:10px; }}
-  .knows li::before {{ content:"\\2713"; color:var(--signal); font-weight:700; }}
-  .knows li.empty {{ color:var(--grey); }}
-  .knows li.empty::before {{ content:"\\00B7"; }}
+  /* cards */
+  .card {
+    border: 1px solid var(--line); border-radius: var(--radius);
+    background: var(--panel); margin-top: 22px; overflow: hidden;
+  }
+  .card-head {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+    padding: 14px 18px; border-bottom: 1px solid var(--line-soft);
+  }
+  .card-head h2 { font-size: 15.5px; }
+  .card-head .note { font-size: 12.5px; color: var(--text-3); }
+  .card-body { padding: 6px 18px 16px; }
+  .card-body.flush { padding: 0; }
 
-  .entry {{ border-top:3px solid var(--rule); padding-block:24px; }}
-  .entry-head {{ display:flex; align-items:baseline; justify-content:space-between;
-    gap:14px; flex-wrap:wrap; }}
-  .entry-date {{ font-family:var(--f-display); text-transform:uppercase; font-weight:400;
-    font-size:clamp(21px,3vw,29px); margin:0; }}
-  .entry-time {{ font-family:var(--f-mono); font-size:12px; letter-spacing:.1em;
-    text-transform:uppercase; color:var(--grey); }}
-  .entry-summary {{ margin:12px 0 0; font-size:17.5px; }}
-  .entry-full {{ margin-top:14px; }}
-  .entry-full summary {{ cursor:pointer; font-family:var(--f-mono); font-size:12px;
-    letter-spacing:.13em; text-transform:uppercase; color:var(--signal); font-weight:600; }}
-  .entry-turns {{ margin-top:14px; border:3px solid var(--rule); background:var(--card);
-    padding:16px; display:flex; flex-direction:column; gap:12px;
-    font-family:var(--f-mono); font-size:13.5px; line-height:1.55; }}
-  .turn {{ display:grid; grid-template-columns:64px 1fr; gap:11px; }}
-  .who {{ font-size:10.5px; font-weight:600; letter-spacing:.09em; text-transform:uppercase;
-    color:var(--grey); padding-top:3px; }}
-  .turn.lucy .who {{ color:var(--signal); }}
-  .said {{ margin:0; }}
+  .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 22px; }
+  .grid-2 .card { margin-top: 0; }
 
-  footer {{ border-top:3px solid var(--rule); padding-block:26px;
-    font-family:var(--f-mono); font-size:12px; color:var(--grey);
-    display:flex; flex-wrap:wrap; gap:10px 22px; justify-content:space-between; }}
+  /* today feed */
+  .feed { list-style: none; margin: 0; padding: 0; }
+  .ev { display: grid; grid-template-columns: 74px 10px 1fr; align-items: start; gap: 10px;
+    padding: 11px 18px; border-bottom: 1px solid var(--line-soft); }
+  .ev:last-child { border-bottom: 0; }
+  .ev-time { font-family: var(--m); font-size: 12px; color: var(--text-3); padding-top: 2px; }
+  .ev-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 7px; background: var(--text-3); }
+  .ev-dot.call { background: var(--accent); }
+  .ev-dot.fact { background: #2f6fd0; }
+  .ev-dot.done { background: var(--green); }
+  .ev-text { font-size: 14.5px; }
+  .ev.empty { grid-template-columns: 1fr; color: var(--text-3); }
+
+  /* rows */
+  .rows { list-style: none; margin: 0; padding: 0; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 14px;
+    padding: 13px 18px; border-bottom: 1px solid var(--line-soft); }
+  .row:last-child { border-bottom: 0; }
+  .row-main { display: flex; flex-direction: column; min-width: 0; }
+  .row-title { font-weight: 600; font-size: 14.5px; }
+  .row-sub { color: var(--text-2); font-size: 13.5px; overflow: hidden;
+    display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; }
+  .row-meta { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .row-when { font-family: var(--m); font-size: 11.5px; color: var(--text-3); }
+  .row.empty { color: var(--text-3); }
+  .pill { font-size: 11.5px; color: var(--text-2); background: var(--sunken);
+    border: 1px solid var(--line); border-radius: 999px; padding: 2px 9px; white-space: nowrap; }
+
+  /* knows chips */
+  .chips { list-style: none; margin: 0; padding: 10px 0 0; display: grid; gap: 8px; }
+  .chip { display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+    background: var(--sunken); border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; }
+  .chip-text { font-size: 14px; }
+  .chip-when { font-family: var(--m); font-size: 11px; color: var(--text-3); white-space: nowrap; }
+  .chip.empty { color: var(--text-3); }
+
+  /* task list */
+  .tasks { list-style: none; margin: 0; padding: 10px 0 0; display: grid; gap: 2px; }
+  .task { display: grid; grid-template-columns: 20px 1fr; gap: 10px; align-items: start;
+    padding: 8px 2px; font-size: 14.5px; }
+  .box { width: 17px; height: 17px; border: 1.5px solid var(--line); border-radius: 5px;
+    display: grid; place-items: center; font-size: 11px; color: #fff; margin-top: 2px; }
+  .task.is-done .box { background: var(--green); border-color: var(--green); }
+  .task.is-done .task-text { color: var(--text-3); text-decoration: line-through; }
+  .task.empty .task-text { color: var(--text-3); }
+
+  /* diary */
+  .day { padding: 16px 18px; border-bottom: 1px solid var(--line-soft); }
+  .day:last-child { border-bottom: 0; }
+  .day-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  .day-date { font-size: 15px; }
+  .day-time { font-family: var(--m); font-size: 11.5px; color: var(--text-3); }
+  .day-summary { margin: 7px 0 0; color: var(--text-2); }
+  .day-full { margin-top: 10px; }
+  .day-full summary { cursor: pointer; font-size: 13px; font-weight: 500; color: var(--accent); }
+  .t-list { margin-top: 12px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--sunken); padding: 14px; display: flex; flex-direction: column; gap: 11px; }
+  .t { display: grid; grid-template-columns: 52px 1fr; gap: 10px; }
+  .t-who { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--text-3); padding-top: 2px; }
+  .t.her .t-who { color: var(--accent); }
+  .t-said { margin: 0; font-size: 14px; }
+  .empty-note { color: var(--text-3); padding: 14px 18px; margin: 0; }
+
+  /* connectors */
+  .conns { list-style: none; margin: 0; padding: 0; }
+  .conn { display: flex; align-items: center; gap: 12px; padding: 12px 18px;
+    border-bottom: 1px solid var(--line-soft); }
+  .conn:last-child { border-bottom: 0; }
+  .conn-icon { width: 32px; height: 32px; border-radius: 8px; background: var(--sunken);
+    border: 1px solid var(--line); display: grid; place-items: center; font-size: 15px; flex-shrink: 0; }
+  .conn-body { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+  .conn-body b { font-size: 14.5px; font-weight: 600; }
+  .conn-body span { font-size: 13px; color: var(--text-2); }
+  .status { font-size: 11.5px; font-weight: 500; border-radius: 999px; padding: 3px 10px;
+    white-space: nowrap; flex-shrink: 0; }
+  .status.connected { color: var(--green); background: var(--green-soft); }
+  .status.off { color: var(--text-3); background: var(--sunken); border: 1px solid var(--line); }
+
+  footer { max-width: 1080px; margin: 0 auto; padding: 20px; border-top: 1px solid var(--line);
+    display: flex; flex-wrap: wrap; gap: 8px 20px; justify-content: space-between;
+    font-size: 12.5px; color: var(--text-3); }
 </style>
 </head>
 <body>
 
-<div class="top"><div class="wrap top-in">
-  <a class="brand" href="/"><span class="m">&#9742;</span>Her</a>
-  <a class="back" href="/">&larr; Back to the line</a>
+<div class="bar"><div class="bar-in">
+  <a class="logo" href="/"><i>&#9742;</i> Her</a>
+  <nav class="bar-nav">
+    <a href="#today">Today</a>
+    <a href="#calls">Your calls</a>
+    <a href="#diary">Your diary</a>
+    <a class="opt" href="#connectors">Connectors</a>
+    <a class="opt" href="/">Back to site</a>
+  </nav>
 </div></div>
 
-<header class="hero"><div class="wrap">
-  <div class="kicker">The journal of {name}</div>
-  <h1>Everything she<br>wrote down</h1>
-  <p class="sub">This page writes itself. Every time you hang up, Lucy works out what
-  mattered and adds it here. Nothing was typed by hand.</p>
-  <div class="stats">
-    <div class="stat"><b>{total_calls}</b><span>Calls</span></div>
-    <div class="stat"><b>{turn_total}</b><span>Things said</span></div>
-    <div class="stat"><b>{fact_count}</b><span>Facts kept</span></div>
-    <div class="stat"><b>{since}</b><span>Since</span></div>
+<main class="page">
+
+  <div class="head">
+    <h1>Your journal</h1>
+    <p>Everything Lucy wrote down for %%NAME%%. This page fills itself in after every call.</p>
   </div>
-</div></header>
 
-<main>
-  <section class="wrap">
-    <h2 class="sec-title">What she knows about you</h2>
-    <p class="sec-note">Pulled out of your conversations automatically, newest first.</p>
-    <ul class="knows">{facts}</ul>
+  <div class="tiles">
+    <div class="tile"><b>%%CALLS%%</b><span>Calls</span></div>
+    <div class="tile"><b>%%TURNS%%</b><span>Things said</span></div>
+    <div class="tile"><b>%%FACTS%%</b><span>Facts kept</span></div>
+    <div class="tile"><b>%%OPEN%%</b><span>Open to-dos</span></div>
+    <div class="tile"><b>%%SINCE%%</b><span>Since</span></div>
+  </div>
+
+  <section class="card" id="today">
+    <div class="card-head">
+      <h2>What happened today</h2>
+      <span class="note">%%TODAY_DATE%%</span>
+    </div>
+    <div class="card-body flush">
+      <p style="padding:12px 18px 4px;margin:0;color:var(--text-2)">%%TODAY_LINE%%</p>
+      <ul class="feed">%%TODAY_EVENTS%%</ul>
+    </div>
   </section>
 
-  <section class="wrap">
-    <h2 class="sec-title">Every call</h2>
-    <p class="sec-note">Newest first. Open any entry to read the whole thing back.</p>
-    {entries}
+  <section class="card" id="calls">
+    <div class="card-head">
+      <h2>Your calls</h2>
+      <span class="note">Newest first</span>
+    </div>
+    <div class="card-body flush"><ul class="rows">%%CALL_ROWS%%</ul></div>
   </section>
+
+  <div class="grid-2" style="margin-top:22px">
+    <section class="card" id="knows">
+      <div class="card-head"><h2>What she knows about you</h2></div>
+      <div class="card-body"><ul class="chips">%%KNOWS%%</ul></div>
+    </section>
+
+    <section class="card" id="list">
+      <div class="card-head"><h2>Your list</h2><span class="note">Ask her on a call</span></div>
+      <div class="card-body"><ul class="tasks">%%LIST%%</ul></div>
+    </section>
+  </div>
+
+  <section class="card" id="diary">
+    <div class="card-head">
+      <h2>Your diary</h2>
+      <span class="note">Every conversation, in full</span>
+    </div>
+    <div class="card-body flush">%%DIARY%%</div>
+  </section>
+
+  <section class="card" id="connectors">
+    <div class="card-head">
+      <h2>Connectors</h2>
+      <span class="note">What she can reach</span>
+    </div>
+    <div class="card-body flush"><ul class="conns">%%CONNECTORS%%</ul></div>
+  </section>
+
 </main>
 
-<footer class="wrap">
-  <span>Updated {stamp}</span>
-  <span>Published from {identities}</span>
+<footer>
+  <span>Updated %%STAMP%%</span>
+  <span>Published from %%IDENTITIES%%</span>
   <span><a href="/">her-ai-friend.vercel.app</a></span>
 </footer>
 </body>
