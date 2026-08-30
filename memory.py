@@ -62,6 +62,15 @@ CREATE TABLE IF NOT EXISTS facts (
     created_at TEXT NOT NULL,
     UNIQUE (phone, fact)
 );
+CREATE TABLE IF NOT EXISTS tasks (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    phone      TEXT NOT NULL,
+    task       TEXT NOT NULL,
+    done       INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    done_at    TEXT
+);
+CREATE INDEX IF NOT EXISTS tasks_phone_idx ON tasks (phone, done, id);
 CREATE VIRTUAL TABLE IF NOT EXISTS search
     USING fts5(phone UNINDEXED, kind UNINDEXED, ref UNINDEXED, text);
 """
@@ -170,6 +179,89 @@ def add_facts(phone: str, facts: list[str], call_id: str | None = None) -> int:
     return added
 
 
+def _norm(text: str) -> str:
+    return " ".join(sorted(w for w in re.findall(r"[a-z0-9']+", text.lower()) if len(w) > 2))
+
+
+def add_task(phone: str, task: str) -> str:
+    """Add one thing to this caller's list, ignoring a repeat of one already open.
+
+    The agent can fire the same action twice for a single spoken request, so
+    without this the list fills up with duplicates.
+    """
+    task = (task or "").strip()
+    if not task:
+        return ""
+    key = _norm(task)
+    with _lock:
+        c = connect()
+        existing = c.execute(
+            "SELECT task FROM tasks WHERE phone=? AND done=0", (phone,)
+        ).fetchall()
+        for r in existing:
+            if _norm(r["task"]) == key:
+                return r["task"]
+        c.execute(
+            "INSERT INTO tasks (phone, task, created_at) VALUES (?, ?, ?)",
+            (phone, task, _now()),
+        )
+        _index(phone, "task", "", task)
+        c.commit()
+    return task
+
+
+def open_tasks(phone: str, limit: int = 25) -> list[str]:
+    rows = connect().execute(
+        "SELECT task FROM tasks WHERE phone=? AND done=0 ORDER BY id", (phone, )
+    ).fetchall()
+    return [r["task"] for r in rows][:limit]
+
+
+def complete_task(phone: str, query: str) -> str | None:
+    """Mark the best keyword match among this caller's open tasks as done."""
+    rows = connect().execute(
+        "SELECT id, task FROM tasks WHERE phone=? AND done=0 ORDER BY id", (phone,)
+    ).fetchall()
+    if not rows:
+        return None
+    words = {w for w in re.findall(r"[a-z0-9']+", query.lower()) if len(w) > 2}
+    best, best_score = None, 0
+    for r in rows:
+        task_words = {w for w in re.findall(r"[a-z0-9']+", r["task"].lower()) if len(w) > 2}
+        score = len(words & task_words)
+        if score > best_score:
+            best, best_score = r, score
+    if best is None:
+        return None
+    with _lock:
+        c = connect()
+        c.execute("UPDATE tasks SET done=1, done_at=? WHERE id=?", (_now(), best["id"]))
+        c.commit()
+    return best["task"]
+
+
+def forget(phone: str, query: str) -> list[str]:
+    """Delete this caller's facts matching a description. Returns what went."""
+    words = {w for w in re.findall(r"[a-z0-9']+", query.lower()) if len(w) > 2}
+    if not words:
+        return []
+    rows = connect().execute("SELECT id, fact FROM facts WHERE phone=?", (phone,)).fetchall()
+    hits = [
+        r for r in rows
+        if words & {w for w in re.findall(r"[a-z0-9']+", r["fact"].lower()) if len(w) > 2}
+    ]
+    if not hits:
+        return []
+    with _lock:
+        c = connect()
+        for r in hits:
+            c.execute("DELETE FROM facts WHERE id=?", (r["id"],))
+            c.execute("DELETE FROM search WHERE phone=? AND kind='fact' AND text=?",
+                      (phone, r["fact"]))
+        c.commit()
+    return [r["fact"] for r in hits]
+
+
 def profile(phone: str) -> dict:
     """Everything Lucy knows about one caller, for injection at call start."""
     c = connect()
@@ -195,6 +287,7 @@ def profile(phone: str) -> dict:
         "first_seen": row["first_seen"] if row else None,
         "last_seen": row["last_seen"] if row else None,
         "facts": facts,
+        "open_tasks": open_tasks(phone),
         "recent_calls": summaries,
     }
 
@@ -239,4 +332,5 @@ def stats() -> dict:
         "calls": one("SELECT COUNT(*) FROM calls"),
         "turns": one("SELECT COUNT(*) FROM turns"),
         "facts": one("SELECT COUNT(*) FROM facts"),
+        "open_tasks": one("SELECT COUNT(*) FROM tasks WHERE done=0"),
     }

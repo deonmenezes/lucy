@@ -25,7 +25,7 @@ import logging
 
 import guava
 from guava import Agent, AcceptCall, Runner, logging_utils
-from guava.helpers.llm import generate
+from guava.helpers.llm import generate, IntentRecognizer
 
 import memory
 
@@ -38,7 +38,10 @@ PURPOSE = (
     "than you talk. Remember what matters to them and bring it up naturally on later "
     "calls. Help with whatever they need: homework and studying, thinking through a "
     "problem, planning their day, or just keeping them company on a walk. Be curious "
-    "and specific, never generic. Never claim to be human, but do not be robotic either."
+    "and specific, never generic. Never claim to be human, but do not be robotic either. "
+    "You can also act, not just talk: you can remember something on request, forget "
+    "something, keep their to-do list, read it back, and check things off. Offer that "
+    "when it would help, and confirm out loud once it is done."
 )
 
 agent = Agent(
@@ -82,6 +85,7 @@ def on_call_start(call: guava.Call) -> None:
                 "calls_so_far": p["call_count"],
                 "last_spoke": p["last_seen"],
                 "things_you_know": p["facts"],
+                "their_open_to_do_list": p["open_tasks"],
                 "recent_conversations": p["recent_calls"],
             },
         )
@@ -128,15 +132,20 @@ def on_question(call: guava.Call, question: str) -> str:
     """Search everything Lucy has ever stored for this caller, then answer."""
     phone = call.get_variable("phone")
     hits = memory.search(phone, question, k=10)
-    if not hits:
+    tasks = memory.open_tasks(phone)
+    if not hits and not tasks:
         return "I don't think you've told me about that yet. Ask me what I do remember."
 
     p = memory.profile(phone)
+    task_block = (
+        "\n\nTheir current open to-do list: " + "; ".join(tasks) if tasks else ""
+    )
     prompt = (
         f"You are Lucy, talking with {p['name'] or 'your friend'} on the phone.\n"
         f"They asked: {question}\n\n"
         "Here are relevant excerpts from your memory of past conversations with them:\n"
         + "\n".join(f"- {h}" for h in hits)
+        + task_block
         + "\n\nAnswer their question in one or two spoken sentences, warmly and specifically, "
         "using only what the excerpts support. If the excerpts do not answer it, say you "
         "don't remember that. Do not mention excerpts, memory systems, or databases."
@@ -144,6 +153,114 @@ def on_question(call: guava.Call, question: str) -> str:
     answer = generate(prompt).strip()
     logger.info("Memory answer: %s", answer)
     return answer
+
+
+actions = IntentRecognizer(
+    {
+        "remember": "Asking you to remember, note down, or store a specific piece of "
+                    "information for later. 'Remember that...', 'note that...'",
+        "forget": "Asking you to forget, delete, or drop something you know about them.",
+        "add_task": "Asking you to remind them to do something, or to add something to "
+                    "their to-do list. 'Remind me to...', 'add ... to my list'",
+        "list_tasks": "Asking what is on their list, what they need to do, or what they "
+                      "asked you to remind them about.",
+        "complete_task": "Telling you they finished or did something on their list, so it "
+                         "can be checked off. 'I did...', 'mark ... done'",
+    }
+)
+
+
+@agent.on_action_request
+def on_action_request(call: guava.Call, request: str):
+    """Classify what the caller wants done. Returns None for ordinary conversation."""
+    return actions.classify(request)
+
+
+def _last_caller_line(call: guava.Call) -> str:
+    """The caller's most recent words, which carry the detail for the action."""
+    turns = memory.transcript(call.id)
+    for speaker, text in reversed(turns):
+        if speaker == "caller":
+            return text
+    return ""
+
+
+@agent.on_action("remember")
+def act_remember(call: guava.Call) -> None:
+    phone = call.get_variable("phone")
+    said = _last_caller_line(call)
+    raw = generate(
+        "Rewrite what this person asked to be remembered as one short standalone fact "
+        "in the third person, no preamble.\n\n" + said,
+        json_schema={"type": "object", "properties": {"fact": {"type": "string"}},
+                     "required": ["fact"]},
+    )
+    fact = json.loads(raw).get("fact", "").strip()
+    if fact:
+        memory.add_facts(phone, [fact], call.id)
+        logger.info("Stored on request: %s", fact)
+        call.send_instruction(f"Confirm warmly that you will remember this: {fact}")
+    else:
+        call.send_instruction("Ask them to say again what they want you to remember.")
+
+
+@agent.on_action("forget")
+def act_forget(call: guava.Call) -> None:
+    phone = call.get_variable("phone")
+    gone = memory.forget(phone, _last_caller_line(call))
+    if gone:
+        logger.info("Forgot %d facts", len(gone))
+        call.send_instruction(
+            "Confirm you have forgotten it and will not bring it up again. "
+            f"You dropped: {'; '.join(gone)}"
+        )
+    else:
+        call.send_instruction(
+            "Tell them you could not find anything like that in what you remember, "
+            "and ask them to put it another way."
+        )
+
+
+@agent.on_action("add_task")
+def act_add_task(call: guava.Call) -> None:
+    phone = call.get_variable("phone")
+    raw = generate(
+        "Turn this into one short to-do item, imperative, no preamble.\n\n"
+        + _last_caller_line(call),
+        json_schema={"type": "object", "properties": {"task": {"type": "string"}},
+                     "required": ["task"]},
+    )
+    task = memory.add_task(phone, json.loads(raw).get("task", ""))
+    if task:
+        logger.info("Added task: %s", task)
+        call.send_instruction(f"Confirm it is on their list: {task}")
+    else:
+        call.send_instruction("Ask them what exactly they want added to the list.")
+
+
+@agent.on_action("list_tasks")
+def act_list_tasks(call: guava.Call) -> None:
+    tasks = memory.open_tasks(call.get_variable("phone"))
+    if tasks:
+        call.send_instruction(
+            "Read their list back conversationally, not as a numbered list. "
+            "It is: " + "; ".join(tasks)
+        )
+    else:
+        call.send_instruction("Tell them their list is empty and offer to start one.")
+
+
+@agent.on_action("complete_task")
+def act_complete_task(call: guava.Call) -> None:
+    phone = call.get_variable("phone")
+    done = memory.complete_task(phone, _last_caller_line(call))
+    if done:
+        logger.info("Completed task: %s", done)
+        call.send_instruction(f"Congratulate them briefly for finishing: {done}")
+    else:
+        call.send_instruction(
+            "Tell them you could not find that on their list, and ask which item they mean."
+        )
 
 
 FACT_SCHEMA = {
@@ -167,6 +284,11 @@ FACT_SCHEMA = {
     },
     "required": ["name", "summary", "facts"],
 }
+
+
+@agent.on_task_complete("companionship")
+def on_companionship_done(call: guava.Call) -> None:
+    call.hangup("Say a warm goodbye and tell them to call back any time.")
 
 
 @agent.on_session_end
